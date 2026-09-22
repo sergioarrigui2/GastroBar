@@ -60,6 +60,12 @@ export default async function PrintCashPage({
       <Row label="TOTAL VENTAS" value={money(r.sales)} bold />
       <Row label="Propinas" value={money(r.tips)} />
       <Rule />
+      <p className="font-bold">AJUSTES E IMPUESTOS</p>
+      <Row label="Descuentos" value={money(r.discounts ?? 0)} />
+      <Row label="Cortesías" value={money(r.comps ?? 0)} />
+      <Row label={`Impuestos (${ctx.tenant.tax_name})`} value={money(r.tax ?? 0)} />
+      <Row label={`Pagos anulados (${r.voided_count ?? 0})`} value={money(r.voided_amount ?? 0)} />
+      <Rule />
       <p className="font-bold">EFECTIVO</p>
       <Row label="Fondo inicial" value={money(r.opening_float)} />
       <Row label="+ Ventas efectivo" value={money(r.cash_sales)} />

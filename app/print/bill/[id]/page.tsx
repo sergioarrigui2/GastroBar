@@ -4,7 +4,7 @@ import { Row, Rule, Ticket } from '@/components/print/Ticket';
 import { currencyDecimals, remainingBalance, suggestedTip } from '@/lib/billing/split-bill';
 import { getOpenBill } from '@/lib/services/orders';
 import { requirePageRole } from '@/lib/tenant-context';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatDateTime } from '@/lib/utils';
 import type { PaymentMethod } from '@/types/domain';
 
 export const metadata = { title: 'Cuenta' };
@@ -26,7 +26,8 @@ export default async function PrintBillPage({
 
   const bill = await getOpenBill(ctx, { order_id: orderId.data });
   if (!bill) notFound();
-  const { order, items, payments } = bill;
+  const { order, items } = bill;
+  const payments = bill.payments.filter((p) => !p.voided_at);
 
   const table = order.table_id
     ? (await ctx.supabase.from('tables').select('label').eq('id', order.table_id).maybeSingle()).data
@@ -38,16 +39,15 @@ export default async function PrintBillPage({
   const remaining = remainingBalance(order.total, order.paid_amount, decimals);
   const isPaid = order.status === 'paid';
   const tips = payments.reduce((s, p) => s + p.tip, 0);
-  const when = new Intl.DateTimeFormat(locale, { timeZone: timezone, dateStyle: 'short', timeStyle: 'short' }).format(
-    new Date(order.closed_at ?? Date.now()),
-  );
+  const when = formatDateTime(order.closed_at ?? Date.now(), locale, timezone);
+  const comps = items.filter((i) => i.comped).reduce((sum, i) => sum + i.gross_total, 0);
 
-  // Agrupa líneas idénticas (mismo producto, modificadores y precio) para un ticket compacto.
-  const lines = new Map<string, { label: string; mods: string; qty: number; total: number }>();
+  // Agrupa líneas idénticas (mismo producto, modificadores, precio y cortesía) para un ticket compacto.
+  const lines = new Map<string, { label: string; mods: string; qty: number; total: number; comped: boolean }>();
   for (const item of items) {
     const mods = item.modifiers.map((m) => m.name).join(', ');
-    const key = `${item.product_id}|${mods}|${item.unit_price + item.modifiers_total}`;
-    const line = lines.get(key) ?? { label: item.product_name, mods, qty: 0, total: 0 };
+    const key = `${item.product_id}|${mods}|${item.unit_price + item.modifiers_total}|${item.comped}`;
+    const line = lines.get(key) ?? { label: item.product_name, mods, qty: 0, total: 0, comped: item.comped };
     line.qty += item.quantity;
     line.total += item.line_total;
     lines.set(key, line);
@@ -77,13 +77,27 @@ export default async function PrintBillPage({
       <ul className="space-y-1">
         {[...lines.values()].map((line, i) => (
           <li key={i}>
-            <Row label={`${line.qty} x ${line.label}`} value={money(line.total)} />
+            <Row label={`${line.qty} x ${line.label}`} value={line.comped ? 'CORTESÍA' : money(line.total)} />
             {line.mods && <p className="pl-4 text-[11px]">+ {line.mods}</p>}
           </li>
         ))}
       </ul>
       <Rule />
+      <Row label="Subtotal" value={money(order.subtotal)} />
+      {comps > 0 && <Row label="Cortesías (no se cobran)" value={money(comps)} />}
+      {order.discount_total > 0 && (
+        <Row
+          label={`Descuento${order.discount_type === 'percent' ? ` ${order.discount_value}%` : ''}`}
+          value={`-${money(order.discount_total)}`}
+        />
+      )}
       <Row label="TOTAL" value={money(order.total)} bold />
+      {order.tax_total > 0 && (
+        <>
+          <Row label="Base gravable" value={money(order.total - order.tax_total)} />
+          <Row label={ctx.tenant.tax_name} value={money(order.tax_total)} />
+        </>
+      )}
       {payments.length > 0 && (
         <>
           <Rule />

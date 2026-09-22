@@ -50,6 +50,9 @@ export function SettingsForm({ tenant }: { tenant: Tenant }) {
   const [address, setAddress] = useState(tenant.address ?? '');
   const [phone, setPhone] = useState(tenant.phone ?? '');
   const [footer, setFooter] = useState(tenant.receipt_footer ?? '');
+  const [taxName, setTaxName] = useState(tenant.tax_name);
+  const [taxRate, setTaxRate] = useState(String(tenant.tax_rate));
+  const [taxIncluded, setTaxIncluded] = useState(tenant.prices_include_tax);
 
   const save = () =>
     run(
@@ -67,6 +70,9 @@ export function SettingsForm({ tenant }: { tenant: Tenant }) {
           address: address.trim() || null,
           phone: phone.trim() || null,
           receipt_footer: footer.trim() || null,
+          tax_name: taxName.trim() || 'INC',
+          tax_rate: toNumber(taxRate || '0'),
+          prices_include_tax: taxIncluded,
         }),
       'Ajustes guardados',
     );
@@ -142,6 +148,40 @@ export function SettingsForm({ tenant }: { tenant: Tenant }) {
             <b>Menú QR público activo</b>
             <span className="block text-zinc-500">
               Los clientes pueden ver el menú en <code>/m/{tenant.slug}</code> escaneando el código QR de la mesa.
+            </span>
+          </span>
+        </label>
+      </Card>
+
+      <Card className="space-y-4">
+        <h2 className="font-semibold">Impuestos</h2>
+        <p className="text-sm text-zinc-500">
+          Tarifa por defecto de todos los productos. Cada producto puede tener la suya (por ejemplo IVA 19% o exento) desde
+          el editor del menú. Los cambios aplican a las comandas nuevas.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="s-taxname">Nombre del impuesto</Label>
+            <Select id="s-taxname" value={taxName} onChange={(e) => setTaxName(e.target.value)}>
+              {[...new Set([taxName, 'INC', 'IVA', 'IGV', 'Ninguno'])].map((n) => (
+                <option key={n} value={n}>
+                  {n === 'INC' ? 'INC · Impuesto nacional al consumo' : n}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="s-taxrate">Tarifa (%)</Label>
+            <Input id="s-taxrate" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} inputMode="decimal" />
+          </div>
+        </div>
+        <label className="flex items-start gap-3 text-sm">
+          <input type="checkbox" className="mt-0.5 size-5 accent-emerald-600" checked={taxIncluded} onChange={(e) => setTaxIncluded(e.target.checked)} />
+          <span>
+            <b>Los precios del menú ya incluyen el impuesto</b>
+            <span className="block text-zinc-500">
+              Lo habitual en restaurantes y bares: el cliente paga el precio de la carta y el recibo desglosa el impuesto.
+              Si lo desmarcas, el impuesto se suma al precio.
             </span>
           </span>
         </label>

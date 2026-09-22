@@ -6,7 +6,9 @@ import {
   ChefHat,
   ChevronLeft,
   Clock,
+  Gift,
   LogOut,
+  Percent,
   Printer,
   Wallet,
   Martini,
@@ -26,11 +28,14 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import {
   cancelOrderAction,
   getOpenBillAction,
+  setItemCompAction,
   setTableStatusAction,
   submitOrderAction,
   updateItemsStatusAction,
 } from '@/app/actions/orders';
 import { signOutAction } from '@/app/actions/auth';
+import { DiscountSheet } from '@/components/billing/DiscountSheet';
+import { PaymentsList } from '@/components/billing/PaymentsList';
 import { SplitBillModal } from '@/components/billing/SplitBillModal';
 import { Badge, Button, Stepper } from '@/components/ui/primitives';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
@@ -80,7 +85,7 @@ export function ComanderoMobile({
   snapshot,
   menu,
 }: {
-  tenant: { id: string; name: string; currency: string; locale: string };
+  tenant: { id: string; name: string; currency: string; locale: string; taxName: string };
   user: { name: string; role: AppRole };
   snapshot: TableStatusSnapshot;
   menu: MenuSnapshot;
@@ -610,10 +615,16 @@ export function ComanderoMobile({
                     bill={bill}
                     money={money}
                     pending={pending}
-                    canCancel={user.role === 'admin' || user.role === 'cashier'}
+                    role={user.role}
+                    taxName={tenant.taxName}
                     onDeliver={deliver}
                     onCancel={cancelOrder}
                     onCharge={() => setSplitOpen(true)}
+                    onChanged={() => {
+                      void loadBill(table.id);
+                      router.refresh();
+                    }}
+                    notify={notify}
                   />
                 )}
               </div>
@@ -722,26 +733,51 @@ function BillView({
   bill,
   money,
   pending,
-  canCancel,
+  role,
+  taxName,
   onDeliver,
   onCancel,
   onCharge,
+  onChanged,
+  notify,
 }: {
   bill: TableBill;
   money: (n: number) => string;
   pending: boolean;
-  canCancel: boolean;
+  role: AppRole;
+  taxName: string;
   onDeliver: (ids: string[]) => void;
   onCancel: () => void;
   onCharge: () => void;
+  onChanged: () => void;
+  notify: (text: string, tone?: 'ok' | 'error') => void;
 }) {
+  const canManage = role === 'admin' || role === 'cashier';
+  const [discountOpen, setDiscountOpen] = useState(false);
+  const [busy, startTransition] = useTransition();
   const rounds = useMemo(() => {
     const map = new Map<number, TableBill['items']>();
     for (const item of bill.items) map.set(item.round, [...(map.get(item.round) ?? []), item]);
     return [...map.entries()];
   }, [bill.items]);
   const readyIds = bill.items.filter((i) => i.status === 'ready').map((i) => i.id);
-  const remaining = Math.max(0, bill.order.total - bill.order.paid_amount);
+  const { order } = bill;
+  const remaining = Math.max(0, order.total - order.paid_amount);
+  const comps = bill.items.filter((i) => i.comped).reduce((s, i) => s + i.gross_total, 0);
+  const activePayments = bill.payments.filter((p) => !p.voided_at).length;
+
+  const toggleComp = (item: TableBill['items'][number]) => {
+    const reason = item.comped ? undefined : prompt(`Motivo de la cortesía para ${item.quantity}× ${item.product_name}:`)?.trim();
+    if (!item.comped && !reason) return;
+    startTransition(async () => {
+      const result = await setItemCompAction({ item_id: item.id, comped: !item.comped, reason });
+      if (!result.ok) notify(result.error, 'error');
+      else {
+        notify(item.comped ? 'Cortesía retirada' : 'Cortesía aplicada');
+        onChanged();
+      }
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -758,7 +794,7 @@ function BillView({
             {items.map((item) => {
               const status = item.status === 'cancelled' ? null : ITEM_STATUS[item.status];
               return (
-                <li key={item.id} className="flex items-center gap-3 px-3 py-2.5">
+                <li key={item.id} className="flex items-center gap-2 px-3 py-2.5">
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">
                       {item.quantity}× {item.product_name}
@@ -766,9 +802,33 @@ function BillView({
                     {item.modifiers.length > 0 && (
                       <p className="truncate text-xs text-zinc-500">{item.modifiers.map((m) => m.name).join(' · ')}</p>
                     )}
-                    {status && <Badge className={cn('mt-1', status.className)}>{status.label}</Badge>}
+                    <span className="mt-1 flex flex-wrap gap-1">
+                      {status && <Badge className={status.className}>{status.label}</Badge>}
+                      {item.comped && (
+                        <Badge className="bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-500/20 dark:text-fuchsia-200">
+                          <Gift className="size-3" /> Cortesía{item.comp_reason ? `: ${item.comp_reason}` : ''}
+                        </Badge>
+                      )}
+                    </span>
                   </div>
-                  <span className="tabular text-sm font-semibold">{money(item.line_total)}</span>
+                  <span className="tabular text-right text-sm font-semibold">
+                    {item.comped && <s className="block text-xs font-normal text-zinc-400">{money(item.gross_total)}</s>}
+                    {money(item.line_total)}
+                  </span>
+                  {canManage && (item.comped || item.allocated === 0) && (
+                    <button
+                      onClick={() => toggleComp(item)}
+                      disabled={busy || pending}
+                      aria-label={item.comped ? `Quitar cortesía de ${item.product_name}` : `Cortesía: ${item.product_name}`}
+                      title={item.comped ? 'Quitar cortesía' : 'Marcar como cortesía'}
+                      className={cn(
+                        'grid size-10 place-items-center rounded-full',
+                        item.comped ? 'bg-fuchsia-600 text-white' : 'text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800',
+                      )}
+                    >
+                      <Gift className="size-4" />
+                    </button>
+                  )}
                   {item.status === 'ready' && (
                     <button
                       onClick={() => onDeliver([item.id])}
@@ -786,15 +846,42 @@ function BillView({
         </section>
       ))}
 
+      <PaymentsList payments={bill.payments} money={money} canVoid={role === 'admin'} onVoided={onChanged} />
+
       <dl className="tabular space-y-1 rounded-2xl bg-zinc-100 p-4 text-sm dark:bg-zinc-900">
         <div className="flex justify-between">
-          <dt>Total</dt>
-          <dd className="font-semibold">{money(bill.order.total)}</dd>
+          <dt>Subtotal</dt>
+          <dd>{money(order.subtotal)}</dd>
         </div>
-        {bill.order.paid_amount > 0 && (
+        {comps > 0 && (
+          <div className="flex justify-between text-fuchsia-700 dark:text-fuchsia-300">
+            <dt>Cortesías (no se cobran)</dt>
+            <dd>{money(comps)}</dd>
+          </div>
+        )}
+        {order.discount_total > 0 && (
+          <div className="flex justify-between text-sky-700 dark:text-sky-300">
+            <dt>
+              Descuento {order.discount_type === 'percent' ? `${order.discount_value}%` : ''}
+              {order.discount_reason && <span className="block text-xs opacity-80">{order.discount_reason}</span>}
+            </dt>
+            <dd>−{money(order.discount_total)}</dd>
+          </div>
+        )}
+        <div className="flex justify-between font-semibold">
+          <dt>Total</dt>
+          <dd>{money(order.total)}</dd>
+        </div>
+        {order.tax_total > 0 && (
+          <div className="flex justify-between text-xs text-zinc-500">
+            <dt>Incluye {taxName}</dt>
+            <dd>{money(order.tax_total)}</dd>
+          </div>
+        )}
+        {order.paid_amount > 0 && (
           <div className="flex justify-between text-emerald-700 dark:text-emerald-400">
-            <dt>Pagado ({bill.payments.length})</dt>
-            <dd>−{money(bill.order.paid_amount)}</dd>
+            <dt>Pagado ({activePayments})</dt>
+            <dd>−{money(order.paid_amount)}</dd>
           </div>
         )}
         <div className="flex justify-between border-t border-zinc-300 pt-2 text-lg font-bold dark:border-zinc-700">
@@ -803,20 +890,38 @@ function BillView({
         </div>
       </dl>
 
-      <Button
-        variant="secondary"
-        className="w-full"
-        onClick={() => window.open(`/print/bill/${bill.order.id}?auto=1`, '_blank', 'width=420,height=720')}
-      >
-        <Printer className="size-4" /> Imprimir precuenta
-      </Button>
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant="secondary" onClick={() => window.open(`/print/bill/${order.id}?auto=1`, '_blank', 'width=420,height=720')}>
+          <Printer className="size-4" /> Precuenta
+        </Button>
+        {canManage ? (
+          <Button variant="secondary" onClick={() => setDiscountOpen(true)} disabled={busy}>
+            <Percent className="size-4" /> {order.discount_total > 0 ? 'Editar descuento' : 'Descuento'}
+          </Button>
+        ) : (
+          <span />
+        )}
+      </div>
       <Button size="xl" className="w-full" onClick={onCharge} disabled={remaining <= 0 || pending}>
         <Receipt className="size-5" /> Cobrar / Dividir cuenta
       </Button>
-      {canCancel && bill.order.paid_amount === 0 && (
+      {canManage && order.paid_amount === 0 && (
         <Button variant="ghost" className="w-full text-red-600" onClick={onCancel} disabled={pending}>
           Anular orden
         </Button>
+      )}
+
+      {discountOpen && (
+        <DiscountSheet
+          order={order}
+          money={money}
+          onClose={() => setDiscountOpen(false)}
+          onApplied={() => {
+            setDiscountOpen(false);
+            notify('Descuento actualizado');
+            onChanged();
+          }}
+        />
       )}
     </div>
   );

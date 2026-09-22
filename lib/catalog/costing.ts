@@ -34,6 +34,11 @@ export function recipeLineCost(
   return 0;
 }
 
+/** Precio sin impuesto: base sobre la que se mide el food cost y el margen. */
+export function netOfTax(price: number, taxRate: number, pricesIncludeTax: boolean): number {
+  return pricesIncludeTax && taxRate > 0 ? price / (1 + taxRate / 100) : price;
+}
+
 export type ProductCosting = {
   cost: number;
   /** Margen bruto sobre el precio (0-100) o null si el precio es 0. */

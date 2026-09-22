@@ -9,7 +9,8 @@ import {
   type SplitShare,
 } from '@/lib/billing/split-bill';
 import type { TenantContext } from '@/lib/tenant-context';
-import { registerPaymentsSchema, type RegisterPaymentsInput } from '@/lib/validations/payment';
+import { registerPaymentsSchema, voidPaymentSchema, type RegisterPaymentsInput } from '@/lib/validations/payment';
+import type { z } from 'zod';
 import type { Json } from '@/types/database';
 import type { RegisterPaymentsResult, SplitType, TableBill } from '@/types/domain';
 
@@ -24,6 +25,14 @@ export async function registerPayments(
     p_split_type: data.split_type,
     p_payments: data.payments as unknown as Json,
   });
+  if (error) throw error;
+  return result as unknown as RegisterPaymentsResult;
+}
+
+/** Anula un pago (sólo admin). Si la cuenta queda con saldo, se reabre y la mesa vuelve a ocupada. */
+export async function voidPayment(ctx: TenantContext, input: z.input<typeof voidPaymentSchema>): Promise<RegisterPaymentsResult> {
+  const data = voidPaymentSchema.parse(input);
+  const { data: result, error } = await ctx.supabase.rpc('void_payment', { p_payment_id: data.payment_id, p_reason: data.reason });
   if (error) throw error;
   return result as unknown as RegisterPaymentsResult;
 }

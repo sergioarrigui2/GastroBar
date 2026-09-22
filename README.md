@@ -37,7 +37,8 @@ lib/
   validations/          Esquemas Zod
 supabase/
   schema.sql            Tablas, enums, RLS, triggers, RPCs, vista, Realtime
-  migrations/           Cambios para bases ya creadas (002 catálogo · 003 caja, claves API, QR, imágenes)
+  migrations/           Cambios para bases ya creadas (002 catálogo · 003 caja, claves API, QR,
+                        imágenes · 004 impuestos, cortesías, descuentos, anulaciones)
   seed.sql              Menú, mesas, insumos y recetas demo
 tests/                  Motor de split-bill + integración SQL (PGlite)
 types/                  Tipos de base de datos y dominio
@@ -97,6 +98,19 @@ types/                  Tipos de base de datos y dominio
 - **Imágenes de productos**
   - **Subida:** desde el editor de producto. Se redimensionan a WebP en el navegador.
   - **Almacenamiento:** Supabase Storage (bucket `product-images`), en una carpeta por gastrobar; solo el admin del tenant puede escribir en ella.
+
+## Impuestos, descuentos y anulaciones
+
+- **Impuestos**
+  - **Por gastrobar:** nombre y tarifa, por defecto **INC 8% incluido en el precio**. Se configuran en *Ajustes*.
+  - **Por producto:** tarifa propia (IVA 19%, 5% o exento) desde el editor del menú.
+  - **Cálculo:** se hace al comandar y queda guardado en cada ítem.
+  - **Recibos:** muestran la base gravable y el impuesto.
+  - **Food cost y margen:** se miden sobre el precio **sin** impuesto.
+- **Cortesías:** admin o caja marcan un ítem con motivo obligatorio. Vale $0, pero el stock sí se descuenta. No se puede aplicar a un ítem ya pagado.
+- **Descuento de cuenta:** porcentaje o monto fijo, con motivo, solo admin o caja. El impuesto se prorratea sobre el total con descuento.
+- **Anulación de pagos:** solo el admin, con motivo. La cuenta se reabre con el saldo pendiente y la mesa vuelve a ocupada. Se hace desde *Cuenta* en el comandero o desde *Caja → Cuentas pagadas*. Se bloquea si el pago pertenece a una caja ya cerrada, para no alterar un reporte Z.
+- **Reportes:** métricas, cortes X y reportes Z incluyen descuentos, cortesías, impuestos y pagos anulados. Los pagos anulados no cuentan como venta.
 
 ## Modelo de seguridad multi-tenant
 

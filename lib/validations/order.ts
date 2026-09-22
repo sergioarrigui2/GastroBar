@@ -26,9 +26,25 @@ export const updateItemsStatusSchema = z.object({
   status: itemStatusSchema,
 });
 
+export const orderDiscountSchema = z
+  .object({
+    order_id: z.uuid(),
+    type: z.enum(['percent', 'amount']).nullable(),
+    value: z.number().finite().min(0).max(100_000_000),
+    reason: z.string().trim().max(200).optional(),
+  })
+  .refine((d) => d.type !== 'percent' || d.value <= 100, { message: 'El porcentaje no puede superar 100', path: ['value'] })
+  .refine((d) => d.type === null || d.value === 0 || Boolean(d.reason), { message: 'Indica el motivo del descuento', path: ['reason'] });
+
+export const itemCompSchema = z
+  .object({ item_id: z.uuid(), comped: z.boolean(), reason: z.string().trim().max(200).optional() })
+  .refine((c) => !c.comped || Boolean(c.reason), { message: 'Indica el motivo de la cortesía', path: ['reason'] });
+
 export const cancelOrderSchema = z.object({ order_id: z.uuid() });
 
 export type OrderItemInput = z.input<typeof orderItemInputSchema>;
 export type SubmitOrderInput = z.input<typeof submitOrderSchema>;
 export type SubmitOrderData = z.output<typeof submitOrderSchema>;
+export type OrderDiscountInput = z.input<typeof orderDiscountSchema>;
+export type ItemCompInput = z.input<typeof itemCompSchema>;
 export type UpdateItemsStatusInput = z.input<typeof updateItemsStatusSchema>;

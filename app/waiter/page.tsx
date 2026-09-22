@@ -12,7 +12,13 @@ export default async function WaiterPage() {
 
   return (
     <ComanderoMobile
-      tenant={{ id: ctx.tenant.id, name: ctx.tenant.name, currency: ctx.tenant.currency, locale: ctx.tenant.locale }}
+      tenant={{
+        id: ctx.tenant.id,
+        name: ctx.tenant.name,
+        currency: ctx.tenant.currency,
+        locale: ctx.tenant.locale,
+        taxName: ctx.tenant.tax_name,
+      }}
       user={{ name: ctx.profile.full_name, role: ctx.role }}
       snapshot={snapshot}
       menu={menu}

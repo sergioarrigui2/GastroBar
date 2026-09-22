@@ -11,7 +11,7 @@ import {
 } from '@/app/actions/catalog';
 import { Badge, Button, Card, Input, Label, Select } from '@/components/ui/primitives';
 import { Sheet } from '@/components/ui/Sheet';
-import { costProduct, foodCostLevel } from '@/lib/catalog/costing';
+import { costProduct, foodCostLevel, netOfTax } from '@/lib/catalog/costing';
 import type { CatalogSnapshot } from '@/lib/services/catalog';
 import { cn } from '@/lib/utils';
 import type { Tables } from '@/types/database';
@@ -52,10 +52,15 @@ export function ProductsPanel({ catalog, lookups }: { catalog: CatalogSnapshot; 
       .filter((p) => (categoryFilter === 'all' || p.category_id === categoryFilter) && (!term || p.name.toLowerCase().includes(term)))
       .map((p) => ({
         product: p,
-        costing: costProduct(p.price, recipesByProduct.get(p.id) ?? [], ingredientMap, subRecipeMap),
+        costing: costProduct(
+          netOfTax(p.price, p.tax_rate ?? lookups.tax.rate, lookups.tax.included),
+          recipesByProduct.get(p.id) ?? [],
+          ingredientMap,
+          subRecipeMap,
+        ),
         lines: recipesByProduct.get(p.id)?.length ?? 0,
       }));
-  }, [catalog.products, categoryFilter, search, recipesByProduct, ingredientMap, subRecipeMap]);
+  }, [catalog.products, categoryFilter, search, recipesByProduct, ingredientMap, subRecipeMap, lookups.tax]);
 
   if (catalog.categories.length === 0) {
     return (
@@ -200,6 +205,8 @@ function ProductEditor({
   const [isActive, setIsActive] = useState(product?.is_active ?? true);
   const [trackStock, setTrackStock] = useState(product?.track_stock ?? true);
   const [imageUrl, setImageUrl] = useState<string | null>(product?.image_url ?? null);
+  const [taxChoice, setTaxChoice] = useState<string>(product?.tax_rate == null ? 'default' : String(product.tax_rate));
+  const effectiveTax = taxChoice === 'default' ? lookups.tax.rate : Number(taxChoice);
   const [lines, setLines] = useState<DraftLine[]>(() =>
     catalog.recipes
       .filter((r) => r.product_id === product?.id)
@@ -214,9 +221,11 @@ function ProductEditor({
       sub_recipe_id: l.ref.startsWith('s:') ? l.ref.slice(2) : null,
       quantity: toNumber(l.quantity),
     }));
-  const costing = costProduct(priceValue > 0 ? priceValue : 0, validLines, ingredientMap, subRecipeMap);
+  const netPrice = netOfTax(priceValue > 0 ? priceValue : 0, effectiveTax, lookups.tax.included);
+  const costing = costProduct(netPrice, validLines, ingredientMap, subRecipeMap);
   const level = validLines.length > 0 ? foodCostLevel(costing.foodCostPct) : 'none';
-  const suggestedPrice = costing.cost > 0 ? costing.cost / (TARGET_FOOD_COST / 100) : null;
+  const suggestedNet = costing.cost > 0 ? costing.cost / (TARGET_FOOD_COST / 100) : null;
+  const suggestedPrice = suggestedNet && lookups.tax.included ? suggestedNet * (1 + effectiveTax / 100) : suggestedNet;
 
   const productModifiers = catalog.modifiers.filter((m) => product && m.product_id === product.id);
   const [newModName, setNewModName] = useState('');
@@ -240,6 +249,7 @@ function ProductEditor({
           is_active: isActive,
           track_stock: trackStock,
           recipe: parsed.recipe,
+          tax_rate: taxChoice === 'default' ? null : Number(taxChoice),
         });
         if (!saved.ok || imageUrl === (product?.image_url ?? null)) return saved;
         const withImage = await setProductImageAction(saved.data, imageUrl);
@@ -334,6 +344,23 @@ function ProductEditor({
               Descontar stock según receta
             </label>
           </div>
+          <div className="sm:col-span-2">
+            <Label htmlFor="p-tax">Impuesto</Label>
+            <Select id="p-tax" value={taxChoice} onChange={(e) => setTaxChoice(e.target.value)}>
+              <option value="default">
+                Por defecto del gastrobar ({lookups.tax.name} {lookups.tax.rate}%)
+              </option>
+              <option value="0">Exento (0%)</option>
+              <option value="5">IVA 5%</option>
+              <option value="8">INC 8%</option>
+              <option value="19">IVA 19%</option>
+            </Select>
+            <p className="mt-1 text-xs text-zinc-500">
+              {lookups.tax.included
+                ? `El precio incluye el impuesto: base ${money(netPrice)} + impuesto ${money(Math.max(0, priceValue - netPrice))}.`
+                : `El impuesto se suma al precio al cobrar (${effectiveTax}%).`}
+            </p>
+          </div>
         </section>
 
         <section>
@@ -354,14 +381,14 @@ function ProductEditor({
               <dd className="font-bold">{money(costing.cost)}</dd>
             </div>
             <div>
-              <dt className="text-xs text-zinc-500">Food cost</dt>
+              <dt className="text-xs text-zinc-500">Food cost (sin impuesto)</dt>
               <dd>
                 <Badge className={LEVEL_STYLES[level]}>{costing.foodCostPct === null || level === 'none' ? '—' : `${costing.foodCostPct.toFixed(1)}%`}</Badge>
               </dd>
             </div>
             <div>
               <dt className="text-xs text-zinc-500">Margen bruto</dt>
-              <dd className="font-bold">{costing.marginPct === null ? '—' : `${money(priceValue - costing.cost)} (${costing.marginPct.toFixed(0)}%)`}</dd>
+              <dd className="font-bold">{costing.marginPct === null ? '—' : `${money(netPrice - costing.cost)} (${costing.marginPct.toFixed(0)}%)`}</dd>
             </div>
             <div>
               <dt className="text-xs text-zinc-500">Precio sugerido ({TARGET_FOOD_COST}%)</dt>

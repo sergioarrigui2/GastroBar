@@ -88,7 +88,7 @@ export function MetricsDashboard({
       </div>
 
       {/* KPIs */}
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Kpi label="Ventas" value={money(metrics.revenue)} hint={`+ ${money(metrics.tips)} propinas`} />
         <Kpi label="Ticket promedio" value={money(metrics.avg_ticket)} hint={`${metrics.orders_closed} cuentas cerradas`} />
         <Kpi
@@ -103,6 +103,16 @@ export function MetricsDashboard({
         />
         <Kpi label="Ítems vendidos" value={String(metrics.items_sold)} />
         <Kpi label="Mermas" value={money(metrics.waste_cost)} hint="Costo de desperdicio registrado" />
+        <Kpi
+          label="Descuentos y cortesías"
+          value={money(metrics.discounts + metrics.comps)}
+          hint={`Desc. ${money(metrics.discounts)} · Cort. ${money(metrics.comps)}`}
+        />
+        <Kpi
+          label="Impuestos recaudados"
+          value={money(metrics.tax_collected)}
+          hint={metrics.voided_payments > 0 ? `${metrics.voided_payments} pago(s) anulado(s)` : 'Incluidos en las ventas'}
+        />
         <Kpi
           label="Preparación cocina"
           value={metrics.avg_prep_minutes.kitchen != null ? `${metrics.avg_prep_minutes.kitchen} min` : '—'}

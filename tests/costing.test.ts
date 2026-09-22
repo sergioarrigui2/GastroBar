@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { costProduct, foodCostLevel, subRecipeUnitCost } from '../lib/catalog/costing.ts';
+import { costProduct, foodCostLevel, netOfTax, subRecipeUnitCost } from '../lib/catalog/costing.ts';
 
 const ingredients = new Map([
   ['ron', { id: 'ron', cost_per_unit: 60 }],
@@ -33,4 +33,10 @@ test('costo por porción con insumos directos y sub-recetas', () => {
 test('precio 0 no produce márgenes', () => {
   assert.deepEqual(costProduct(0, [], ingredients, subRecipes), { cost: 0, marginPct: null, foodCostPct: null });
   assert.equal(foodCostLevel(40), 'high');
+});
+
+test('netOfTax: el food cost se mide sobre el precio sin impuesto incluido', () => {
+  assert.equal(netOfTax(10_800, 8, true), 10_000);
+  assert.equal(netOfTax(10_000, 19, false), 10_000);
+  assert.equal(netOfTax(10_000, 0, true), 10_000);
 });

@@ -36,6 +36,9 @@ type TenantRow = {
   phone: string | null;
   receipt_footer: string | null;
   public_menu_enabled: boolean;
+  tax_name: string;
+  tax_rate: number;
+  prices_include_tax: boolean;
 };
 
 type ProfileRow = {
@@ -80,6 +83,7 @@ type ProductRow = {
   image_url: string | null;
   is_active: boolean;
   track_stock: boolean;
+  tax_rate: number | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -147,6 +151,12 @@ type OrderRow = {
   subtotal: number;
   total: number;
   paid_amount: number;
+  discount_type: 'percent' | 'amount' | null;
+  discount_value: number;
+  discount_reason: string | null;
+  discount_by: string | null;
+  discount_total: number;
+  tax_total: number;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -166,6 +176,12 @@ type OrderItemRow = {
   modifiers: AppliedModifier[];
   modifiers_total: number;
   line_total: number;
+  gross_total: number;
+  tax_rate: number;
+  tax_amount: number;
+  comped: boolean;
+  comp_reason: string | null;
+  comped_by: string | null;
   notes: string | null;
   status: ItemStatus;
   round: number;
@@ -190,6 +206,9 @@ type PaymentRow = {
   reference: string | null;
   created_by: string | null;
   created_at: string;
+  voided_at: string | null;
+  voided_by: string | null;
+  void_reason: string | null;
 };
 
 type PaymentAllocationRow = {
@@ -339,6 +358,7 @@ export type Database = {
           p_track_stock: boolean;
           p_sort_order: number;
           p_recipe?: Json | null;
+          p_tax_rate?: number | null;
         };
         Returns: string;
       };
@@ -358,6 +378,7 @@ export type Database = {
       get_cash_session: { Args: { p_session_id?: string | null }; Returns: Json };
       close_cash_session: { Args: { p_counted_cash: number; p_notes?: string | null }; Returns: Json };
       get_public_menu: { Args: { p_slug: string }; Returns: Json };
+      void_payment: { Args: { p_payment_id: string; p_reason: string }; Returns: Json };
       get_shift_metrics: {
         Args: { p_from?: string; p_to?: string };
         Returns: Json;

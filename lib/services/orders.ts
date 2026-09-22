@@ -2,8 +2,12 @@ import 'server-only';
 
 import type { TenantContext } from '@/lib/tenant-context';
 import {
+  itemCompSchema,
+  orderDiscountSchema,
   submitOrderSchema,
   updateItemsStatusSchema,
+  type ItemCompInput,
+  type OrderDiscountInput,
   type SubmitOrderInput,
   type UpdateItemsStatusInput,
 } from '@/lib/validations/order';
@@ -38,6 +42,33 @@ export async function updateItemsStatus(ctx: TenantContext, input: UpdateItemsSt
     .select('id');
   if (error) throw error;
   return rows.length;
+}
+
+/** Descuento de cuenta (porcentaje o monto); type null lo quita. Los triggers validan rol, motivo y saldo. */
+export async function applyOrderDiscount(ctx: TenantContext, input: OrderDiscountInput): Promise<void> {
+  const data = orderDiscountSchema.parse(input);
+  const clear = data.type === null || data.value === 0;
+  const { error } = await ctx.supabase
+    .from('orders')
+    .update({
+      discount_type: clear ? null : data.type,
+      discount_value: clear ? 0 : data.value,
+      discount_reason: clear ? null : (data.reason ?? null),
+    })
+    .eq('tenant_id', ctx.tenant.id)
+    .eq('id', data.order_id);
+  if (error) throw error;
+}
+
+/** Marca o desmarca un ítem como cortesía (vale 0; el stock ya se descontó al comandar). */
+export async function setItemComp(ctx: TenantContext, input: ItemCompInput): Promise<void> {
+  const data = itemCompSchema.parse(input);
+  const { error } = await ctx.supabase
+    .from('order_items')
+    .update({ comped: data.comped, comp_reason: data.comped ? (data.reason ?? null) : null })
+    .eq('tenant_id', ctx.tenant.id)
+    .eq('id', data.item_id);
+  if (error) throw error;
 }
 
 export async function cancelOrder(ctx: TenantContext, orderId: string): Promise<void> {
@@ -84,7 +115,8 @@ export async function getOpenBill(
   if (itemsRes.error) throw itemsRes.error;
   if (paymentsRes.error) throw paymentsRes.error;
 
-  const paymentIds = paymentsRes.data.map((p) => p.id);
+  // Lo ya pagado por ítem sólo cuenta pagos vigentes (no anulados).
+  const paymentIds = paymentsRes.data.filter((p) => !p.voided_at).map((p) => p.id);
   const allocationsRes = paymentIds.length
     ? await supabase
         .from('payment_allocations')

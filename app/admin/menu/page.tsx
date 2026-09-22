@@ -10,6 +10,7 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
   return (
     <MenuManager
       tenantId={ctx.tenant.id}
+      tax={{ name: ctx.tenant.tax_name, rate: ctx.tenant.tax_rate, included: ctx.tenant.prices_include_tax }}
       catalog={catalog}
       currency={ctx.tenant.currency}
       locale={ctx.tenant.locale}

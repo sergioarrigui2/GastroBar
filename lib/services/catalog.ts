@@ -83,6 +83,7 @@ export async function saveProduct(ctx: TenantContext, input: ProductInput): Prom
     p_is_active: data.is_active,
     p_track_stock: data.track_stock,
     p_sort_order: data.sort_order,
+    p_tax_rate: data.tax_rate ?? null,
     p_recipe: data.recipe
       ? (data.recipe.map((l) => ({
           ingredient_id: l.ingredient_id ?? null,

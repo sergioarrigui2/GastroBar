@@ -267,6 +267,74 @@ describe('schema', () => {
     }
   });
 
+  test('impuestos: INC incluido por defecto, IVA adicional por producto y exentos', async () => {
+    ids.t2 = (await one<{ id: string }>(ADMIN_A, `insert into tables (zone_id, label) values ($1, 'T2') returning id`, [ids.zone])).id;
+    // Producto con IVA 19% en un tenant que cobra precios SIN impuesto incluido.
+    await db.exec(`update public.tenants set prices_include_tax = false where id = '${ids.tenantA}'`);
+    const { id: soda } = await one<{ id: string }>(
+      ADMIN_A,
+      `select public.save_product(null, $1, 'Soda', null, 10000, true, false, 9, null, 19) as id`,
+      [ids.bar],
+    );
+    const excl = await submit(WAITER_A, [{ product_id: soda, quantity: 2 }], ids.t2!);
+    assert.equal(excl.total, 23800); // 20.000 + 19%
+    const [line] = await as<{ tax_amount: string; tax_rate: string }>(WAITER_A, `select tax_amount, tax_rate from order_items where order_id = $1`, [excl.order_id]);
+    assert.equal(Number(line!.tax_amount), 3800);
+    assert.equal(Number(line!.tax_rate), 19);
+    await as(ADMIN_A, `update orders set status = 'cancelled' where id = $1`, [excl.order_id]);
+    await db.exec(`update public.tenants set prices_include_tax = true where id = '${ids.tenantA}'`);
+
+    // INC 8% incluido (tarifa del tenant): el total no cambia, el impuesto se desglosa.
+    const incl = await submit(WAITER_A, [{ product_id: ids.mojito, quantity: 1 }], ids.t2!);
+    assert.equal(incl.total, 25000);
+    const order = await one<{ tax_total: string }>(WAITER_A, `select tax_total from orders where id = $1`, [incl.order_id]);
+    assert.equal(Number(order.tax_total), 1851.85); // 25.000 − 25.000 / 1,08
+    ids.taxOrder = incl.order_id;
+  });
+
+  test('cortesías y descuentos: sólo admin/caja, con motivo, recalculan total e impuesto', async () => {
+    await submit(WAITER_A, [{ product_id: ids.mojito, quantity: 1 }], ids.t2!);
+    const [item] = await as<{ id: string }>(WAITER_A, `select id from order_items where order_id = $1 and round = 2`, [ids.taxOrder]);
+
+    await assert.rejects(as(WAITER_A, `update order_items set comped = true, comp_reason = 'x' where id = $1`, [item!.id]), /forbidden/);
+    await assert.rejects(as(ADMIN_A, `update order_items set comped = true where id = $1`, [item!.id]), /comp_reason_required/);
+    await as(ADMIN_A, `update order_items set comped = true, comp_reason = 'Cumpleaños' where id = $1`, [item!.id]);
+    type Totals = { subtotal: string; total: string; discount_total: string; tax_total: string };
+    const totals = () => one<Totals>(ADMIN_A, `select subtotal, total, discount_total, tax_total from orders where id = $1`, [ids.taxOrder]);
+    let order = await totals();
+    assert.equal(Number(order.subtotal), 25000); // la cortesía vale 0
+
+    await assert.rejects(as(WAITER_A, `update orders set discount_type = 'percent', discount_value = 10, discount_reason = 'x' where id = $1`, [ids.taxOrder]), /forbidden/);
+    await assert.rejects(as(ADMIN_A, `update orders set discount_type = 'percent', discount_value = 10 where id = $1`, [ids.taxOrder]), /discount_reason_required/);
+    await as(ADMIN_A, `update orders set discount_type = 'percent', discount_value = 10, discount_reason = 'Cliente frecuente' where id = $1`, [ids.taxOrder]);
+    order = await totals();
+    assert.equal(Number(order.total), 22500);
+    assert.equal(Number(order.discount_total), 2500);
+    assert.equal(Number(order.tax_total), 1666.67); // impuesto prorrateado por el descuento
+  });
+
+  test('anular pago: sólo admin, reabre la cuenta y la mesa; bloqueado en caja cerrada', async () => {
+    const paid = await one<{ r: { status: string } }>(WAITER_A, `select public.register_payments($1, 'full', $2::jsonb) as r`, [
+      ids.taxOrder,
+      JSON.stringify([{ amount: 22500, method: 'card' }]),
+    ]);
+    assert.equal(paid.r.status, 'paid');
+    const [pay] = await as<{ id: string }>(ADMIN_A, `select id from payments where order_id = $1`, [ids.taxOrder]);
+
+    await assert.rejects(as(WAITER_A, `select public.void_payment($1, 'error')`, [pay!.id]), /forbidden/);
+    await assert.rejects(as(ADMIN_A, `select public.void_payment($1, ' ')`, [pay!.id]), /void_reason_required/);
+    const voided = await one<{ r: { status: string; remaining: number } }>(ADMIN_A, `select public.void_payment($1, 'Cobro duplicado') as r`, [pay!.id]);
+    assert.notEqual(voided.r.status, 'paid');
+    assert.equal(voided.r.remaining, 22500);
+    const table = await one<{ status: string }>(ADMIN_A, `select status from tables where id = $1`, [ids.t2]);
+    assert.equal(table.status, 'occupied');
+    await assert.rejects(as(ADMIN_A, `select public.void_payment($1, 'otra vez')`, [pay!.id]), /payment_already_voided/);
+
+    // Un pago que pertenece a una caja ya cerrada (prueba de caja) no se puede anular.
+    const [closedPay] = await as<{ id: string }>(ADMIN_A, `select id from payments where tip = 2500 and voided_at is null`);
+    await assert.rejects(as(ADMIN_A, `select public.void_payment($1, 'tarde')`, [closedPay!.id]), /payment_in_closed_cash_session/);
+  });
+
   test('mermas y compras con costo promedio ponderado; métricas sólo para roles ejecutivos', async () => {
     await as(BAR_A, `select public.record_inventory_movement($1, 'waste', 50, 'Botella rota')`, [ids.ron]);
     await assert.rejects(as(WAITER_A, `select public.record_inventory_movement($1, 'purchase', 50)`, [ids.ron]), /forbidden/);

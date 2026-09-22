@@ -28,6 +28,14 @@ const DB_ERROR_MESSAGES: Record<string, string> = {
   sub_recipe_not_found: 'Sub-receta no encontrada',
   cash_session_already_open: 'Ya hay una caja abierta',
   cash_session_not_open: 'No hay una caja abierta',
+  comp_reason_required: 'Indica el motivo de la cortesía',
+  discount_reason_required: 'Indica el motivo del descuento',
+  discount_exceeds_balance: 'El descuento deja la cuenta por debajo de lo ya pagado',
+  item_already_paid: 'Ese ítem ya fue pagado; anula el pago primero',
+  void_reason_required: 'Indica el motivo de la anulación',
+  payment_not_found: 'Pago no encontrado',
+  payment_already_voided: 'El pago ya estaba anulado',
+  payment_in_closed_cash_session: 'El pago pertenece a una caja ya cerrada y no se puede anular',
   api_key_requires_ai_agent: 'Las claves API sólo pueden asignarse a usuarios con rol Agente IA',
 };
 
@@ -47,6 +55,9 @@ export function toUserMessage(error: unknown): string {
     const key = (error.message ?? '').split(':')[0]?.trim() ?? '';
     const known = DB_ERROR_MESSAGES[key];
     if (known) return error.details ? `${known} (${error.details})` : known;
+    if (error.code === '23505' && error.message?.includes('orders_one_open_per_table')) {
+      return 'La mesa ya tiene otra cuenta abierta; ciérrala antes de reabrir esta';
+    }
     if (error.code === '23505') return 'Ya existe un registro con ese nombre';
     if (error.code === '23503') {
       return 'No se puede eliminar porque está en uso (ventas, recetas o productos asociados). Desactívalo en su lugar.';

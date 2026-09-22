@@ -54,6 +54,10 @@ export type ShiftMetrics = {
   orders_closed: number;
   avg_ticket: number;
   items_sold: number;
+  discounts: number;
+  comps: number;
+  tax_collected: number;
+  voided_payments: number;
   open_orders: number;
   open_orders_value: number;
   occupied_tables: number;

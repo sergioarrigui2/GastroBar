@@ -38,6 +38,8 @@ export const productSchema = z.object({
   track_stock: z.boolean().default(true),
   sort_order: sortOrder,
   recipe: z.array(recipeLineSchema).max(40).optional(),
+  /** null = tarifa del gastrobar; 0 = exento. */
+  tax_rate: z.number().finite().min(0).max(100).nullable().optional(),
 });
 
 export const modifierSchema = z
@@ -100,6 +102,9 @@ export const tenantSettingsSchema = z
     kds_late_minutes: z.int().min(2).max(480),
     allow_negative_stock: z.boolean(),
     public_menu_enabled: z.boolean(),
+    tax_name: z.string().trim().min(1).max(20),
+    tax_rate: z.number().finite().min(0).max(100),
+    prices_include_tax: z.boolean(),
     tax_id: z.string().trim().max(40).nullable(),
     address: z.string().trim().max(200).nullable(),
     phone: z.string().trim().max(40).nullable(),

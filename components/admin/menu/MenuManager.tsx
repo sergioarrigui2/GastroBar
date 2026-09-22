@@ -20,6 +20,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
 
 export type CatalogLookups = {
   tenantId: string;
+  tax: { name: string; rate: number; included: boolean };
   ingredientMap: Map<string, CostIngredient>;
   subRecipeMap: Map<string, CostSubRecipe>;
   money: (n: number) => string;
@@ -29,12 +30,14 @@ export type CatalogLookups = {
 
 export function MenuManager({
   tenantId,
+  tax,
   catalog,
   currency,
   locale,
   initialTab,
 }: {
   tenantId: string;
+  tax: CatalogLookups['tax'];
   catalog: CatalogSnapshot;
   currency: string;
   locale: string;
@@ -45,13 +48,14 @@ export function MenuManager({
   const lookups = useMemo<CatalogLookups>(
     () => ({
       tenantId,
+      tax,
       ingredientMap: new Map(catalog.ingredients.map((i) => [i.id, i])),
       subRecipeMap: new Map(catalog.subRecipes.map((s) => [s.id, s])),
       money: (n: number) => formatCurrency(n, currency, locale),
       currency,
       locale,
     }),
-    [tenantId, catalog.ingredients, catalog.subRecipes, currency, locale],
+    [tenantId, tax, catalog.ingredients, catalog.subRecipes, currency, locale],
   );
 
   const selectTab = (next: Tab) => {

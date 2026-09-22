@@ -13,6 +13,11 @@ export type CashReport = {
   payments_count: number;
   orders_paid: number;
   orders_cancelled: number;
+  discounts: number;
+  comps: number;
+  tax: number;
+  voided_count: number;
+  voided_amount: number;
   by_method: Partial<Record<PaymentMethod, { amount: number; tips: number; count: number }>>;
   cash_sales: number;
   cash_tips: number;

@@ -1,17 +1,20 @@
 'use client';
 
-import { ArrowDownCircle, ArrowUpCircle, ChevronLeft, LockKeyhole, Printer, Receipt, Wallet } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, ChevronLeft, Eye, LockKeyhole, Printer, Receipt, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { addCashMovementAction, closeCashSessionAction, openCashSessionAction } from '@/app/actions/cash';
+import { getBillByOrderAction } from '@/app/actions/orders';
+import { PaymentsList } from '@/components/billing/PaymentsList';
 import { FlashMessage, toNumber, useAdminMutation } from '@/components/admin/useAdminMutation';
 import { Button, Card, Input, Label } from '@/components/ui/primitives';
+import { Sheet } from '@/components/ui/Sheet';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useRealtimeRefresh } from '@/components/ui/useRealtimeRefresh';
 import type { CashSession } from '@/lib/services/cash';
 import { cn, formatCurrency, formatDateTime } from '@/lib/utils';
-import type { AppRole, PaymentMethod } from '@/types/domain';
+import type { AppRole, PaymentMethod, TableBill } from '@/types/domain';
 
 const METHOD: Record<PaymentMethod, string> = { cash: 'Efectivo', card: 'Tarjeta', transfer: 'Transferencia', other: 'Otro' };
 
@@ -54,10 +57,16 @@ export function CashRegister({
 
   useRealtimeRefresh({
     channel: `cash:${tenant.id}`,
-    subscriptions: [{ table: 'payments', event: 'INSERT', filter: `tenant_id=eq.${tenant.id}` }],
+    subscriptions: [{ table: 'payments', filter: `tenant_id=eq.${tenant.id}` }],
     onRefresh: () => router.refresh(),
     debounceMs: 1000,
   });
+
+  const [viewing, setViewing] = useState<TableBill | null>(null);
+  const openBill = async (orderId: string) => {
+    const result = await getBillByOrderAction(orderId);
+    if (result.ok) setViewing(result.data);
+  };
 
   const r = session?.report;
   const countedValue = toNumber(counted);
@@ -143,6 +152,24 @@ export function CashRegister({
                   </div>
                 ))}
               </dl>
+              <dl className="tabular mt-3 space-y-1 border-t border-zinc-100 pt-3 text-xs text-zinc-500 dark:border-zinc-800">
+                <div className="flex justify-between">
+                  <dt>Descuentos · cortesías</dt>
+                  <dd>
+                    {money(r.discounts ?? 0)} · {money(r.comps ?? 0)}
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>Impuestos</dt>
+                  <dd>{money(r.tax ?? 0)}</dd>
+                </div>
+                {(r.voided_count ?? 0) > 0 && (
+                  <div className="flex justify-between text-red-600">
+                    <dt>Pagos anulados ({r.voided_count})</dt>
+                    <dd>{money(r.voided_amount ?? 0)}</dd>
+                  </div>
+                )}
+              </dl>
               <Button variant="secondary" className="mt-4 w-full" onClick={() => openPrint(`/print/cash/${session.id}`)}>
                 <Printer className="size-4" /> Imprimir corte parcial (X)
               </Button>
@@ -216,6 +243,9 @@ export function CashRegister({
                         {o.closedAt && <span className="text-zinc-500"> · {fmt(o.closedAt)}</span>}
                       </span>
                       <span className="font-semibold">{money(o.total)}</span>
+                      <Button variant="ghost" size="sm" aria-label={`Ver pagos ${o.orderNumber}`} onClick={() => openBill(o.id)}>
+                        <Eye className="size-4" />
+                      </Button>
                       <Button variant="ghost" size="sm" aria-label={`Imprimir recibo ${o.orderNumber}`} onClick={() => openPrint(`/print/bill/${o.id}`)}>
                         <Printer className="size-4" />
                       </Button>
@@ -317,6 +347,31 @@ export function CashRegister({
           </div>
         )}
       </Card>
+      {viewing && (
+        <Sheet
+          open
+          onClose={() => setViewing(null)}
+          title={`Cuenta #${viewing.order.order_number}`}
+          subtitle={`Total ${money(viewing.order.total)} · Pagado ${money(viewing.order.paid_amount)}`}
+        >
+          <div className="space-y-3">
+            <PaymentsList
+              payments={viewing.payments}
+              money={money}
+              canVoid={role === 'admin'}
+              onVoided={() => {
+                void openBill(viewing.order.id);
+                router.refresh();
+              }}
+            />
+            <p className="text-xs text-zinc-500">
+              {role === 'admin'
+                ? 'Al anular un pago la cuenta se reabre con el saldo pendiente y la mesa vuelve a ocupada. Los pagos de cajas ya cerradas no se pueden anular.'
+                : 'Sólo un administrador puede anular pagos.'}
+            </p>
+          </div>
+        </Sheet>
+      )}
       <FlashMessage flash={flash} />
     </div>
   );

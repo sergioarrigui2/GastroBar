@@ -30,5 +30,10 @@ export const registerPaymentsSchema = z
     { message: 'En división por ítem cada pago debe indicar sus ítems', path: ['payments'] },
   );
 
+export const voidPaymentSchema = z.object({
+  payment_id: z.uuid(),
+  reason: z.string().trim().min(1, 'Indica el motivo de la anulación').max(200),
+});
+
 export type PaymentInput = z.input<typeof paymentInputSchema>;
 export type RegisterPaymentsInput = z.input<typeof registerPaymentsSchema>;
