@@ -351,3 +351,93 @@ describe('schema', () => {
     await assert.rejects(as(WAITER_A, `select public.get_shift_metrics()`), /forbidden/);
   });
 });
+
+describe('facturación electrónica', () => {
+  const pay = (orderId: string, amount: number) =>
+    one<{ r: { status: string } }>(WAITER_A, `select public.register_payments($1, 'full', $2::jsonb) as r`, [
+      orderId,
+      JSON.stringify([{ amount, method: 'cash' }]),
+    ]).then((row) => row.r);
+  const docsOf = (orderId: string) =>
+    as<{ id: string; doc_type: string; status: string; credited_at: string | null; customer: unknown; payload: { totals: { total: number } } }>(
+      ADMIN_A,
+      `select id, doc_type, status, credited_at, customer, payload from einvoice_documents where order_id = $1 order by created_at`,
+      [orderId],
+    );
+
+  test('desactivada: cobrar no genera documentos', async () => {
+    ids.since = (await one<{ t: string }>(ADMIN_A, `select now()::text as t`)).t;
+    ids.t3 = (await one<{ id: string }>(ADMIN_A, `insert into tables (zone_id, label) values ($1, 'T3') returning id`, [ids.zone])).id;
+    const order = await submit(WAITER_A, [{ product_id: ids.mojito, quantity: 1 }], ids.t3!);
+    assert.equal((await pay(order.order_id, order.total)).status, 'paid');
+    assert.equal((await docsOf(order.order_id)).length, 0);
+    ids.unbilledOrder = order.order_id;
+  });
+
+  test('activada: encola POS o factura según el cliente, con snapshot y sin duplicados', async () => {
+    await db.exec(`update public.tenants set einvoice_enabled = true, einvoice_provider = 'simulator' where id = '${ids.tenantA}'`);
+
+    const pos = await submit(WAITER_A, [{ product_id: ids.mojito, quantity: 2 }], ids.t3!);
+    await pay(pos.order_id, pos.total);
+    const [posDoc] = await docsOf(pos.order_id);
+    assert.equal(posDoc!.doc_type, 'pos');
+    assert.equal(posDoc!.status, 'pending');
+    assert.equal(posDoc!.payload.totals.total, 50000);
+
+    const inv = await submit(WAITER_A, [{ product_id: ids.mojito, quantity: 1 }], ids.t3!);
+    await as(WAITER_A, `select public.set_billing_customer($1, $2::jsonb)`, [
+      inv.order_id,
+      JSON.stringify({ id_type: 'NIT', id_number: '900123456', name: 'Empresa SAS', email: 'fe@empresa.co' }),
+    ]);
+    await pay(inv.order_id, inv.total);
+    const [invDoc] = await docsOf(inv.order_id);
+    assert.equal(invDoc!.doc_type, 'invoice');
+    assert.deepEqual((invDoc!.customer as { id_number: string }).id_number, '900123456');
+    ids.invOrder = inv.order_id;
+
+    // Reconciliación: sólo encola cuentas pagadas sin documento (la del test anterior).
+    const [missing] = await as<{ n: number }>(ADMIN_A, `select public.enqueue_missing_einvoices($1::timestamptz) as n`, [ids.since]);
+    assert.equal(missing!.n, 1);
+    assert.equal((await docsOf(ids.unbilledOrder!)).length, 1);
+    const [again] = await as<{ n: number }>(ADMIN_A, `select public.enqueue_missing_einvoices($1::timestamptz) as n`, [ids.since]);
+    assert.equal(again!.n, 0);
+  });
+
+  test('anular pago: cancela lo pendiente y emite nota crédito sobre lo aceptado', async () => {
+    // Documento aún pendiente -> se cancela al reabrir la cuenta.
+    const [pendingPay] = await as<{ id: string }>(ADMIN_A, `select id from payments where order_id = $1`, [ids.unbilledOrder]);
+    await as(ADMIN_A, `select public.void_payment($1, 'Error de caja')`, [pendingPay!.id]);
+    assert.equal((await docsOf(ids.unbilledOrder!))[0]!.status, 'cancelled');
+    // Libera la mesa: la cuenta reabierta sin pagos se anula.
+    await as(ADMIN_A, `update orders set status = 'cancelled' where id = $1`, [ids.unbilledOrder]);
+
+    // Documento aceptado por el proveedor -> nota crédito y se permite re-facturar al volver a pagar.
+    await db.exec(`update public.einvoice_documents set status = 'accepted', cufe = 'x' where order_id = '${ids.invOrder}'`);
+    const [invPay] = await as<{ id: string }>(ADMIN_A, `select id from payments where order_id = $1`, [ids.invOrder]);
+    await as(ADMIN_A, `select public.void_payment($1, 'Cliente pagó con otra tarjeta')`, [invPay!.id]);
+    let docs = await docsOf(ids.invOrder!);
+    assert.equal(docs.length, 2);
+    assert.ok(docs[0]!.credited_at);
+    assert.equal(docs[1]!.doc_type, 'credit_note');
+
+    const order = await one<{ total: string }>(ADMIN_A, `select total from orders where id = $1`, [ids.invOrder]);
+    await pay(ids.invOrder!, Number(order.total));
+    docs = await docsOf(ids.invOrder!);
+    assert.equal(docs.length, 3);
+    assert.equal(docs[2]!.doc_type, 'invoice');
+  });
+
+  test('permisos: meseros no ven documentos; sólo admin reintenta', async () => {
+    const [seen] = await as<{ c: number }>(WAITER_A, `select count(*)::int as c from einvoice_documents`);
+    assert.equal(seen!.c, 0);
+    const [otherTenant] = await as<{ c: number }>(ADMIN_B, `select count(*)::int as c from einvoice_documents`);
+    assert.equal(otherTenant!.c, 0);
+    const [doc] = await as<{ id: string }>(ADMIN_A, `select id from einvoice_documents where status = 'pending' limit 1`);
+    await db.exec(`update public.einvoice_documents set status = 'error', attempts = 5 where id = '${doc!.id}'`);
+    await assert.rejects(as(WAITER_A, `select public.retry_einvoice_document($1)`, [doc!.id]), /forbidden/);
+    await as(ADMIN_A, `select public.retry_einvoice_document($1)`, [doc!.id]);
+    const [row] = await as<{ status: string; attempts: number }>(ADMIN_A, `select status, attempts from einvoice_documents where id = $1`, [doc!.id]);
+    assert.equal(row!.status, 'pending');
+    assert.equal(row!.attempts, 0);
+  });
+});

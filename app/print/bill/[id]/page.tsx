@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import QRCode from 'qrcode';
 import { z } from 'zod';
 import { Row, Rule, Ticket } from '@/components/print/Ticket';
 import { currencyDecimals, remainingBalance, suggestedTip } from '@/lib/billing/split-bill';
@@ -28,6 +29,22 @@ export default async function PrintBillPage({
   if (!bill) notFound();
   const { order, items } = bill;
   const payments = bill.payments.filter((p) => !p.voided_at);
+
+  // Documento electrónico vigente de la venta (sólo admin/caja lo ven por RLS).
+  const { data: edoc } = await ctx.supabase
+    .from('einvoice_documents')
+    .select('doc_type, status, provider, number, cufe, qr_data')
+    .eq('tenant_id', ctx.tenant.id)
+    .eq('order_id', order.id)
+    .in('doc_type', ['pos', 'invoice'])
+    .is('credited_at', null)
+    .neq('status', 'cancelled')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const edocQr = edoc?.status === 'accepted' && edoc.qr_data
+    ? await QRCode.toString(edoc.qr_data, { type: 'svg', margin: 0, errorCorrectionLevel: 'M' })
+    : null;
 
   const table = order.table_id
     ? (await ctx.supabase.from('tables').select('label').eq('id', order.table_id).maybeSingle()).data
@@ -69,7 +86,20 @@ export default async function PrintBillPage({
       footer={
         <>
           {!isPaid && <p>Propina sugerida (10%): {money(suggestedTip(remaining, 10, decimals))}</p>}
-          <p>Documento no válido como factura electrónica.</p>
+          {edoc?.status === 'accepted' ? (
+            <div className="space-y-1">
+              {edoc.provider === 'simulator' && <p className="font-bold">DOCUMENTO SIMULADO · SIN VALIDEZ FISCAL</p>}
+              <p className="font-bold">
+                {edoc.doc_type === 'invoice' ? 'Factura electrónica' : 'Documento equivalente POS electrónico'} {edoc.number}
+              </p>
+              {edoc.cufe && <p className="break-all text-[9px] leading-tight">{edoc.doc_type === 'invoice' ? 'CUFE' : 'CUDE'}: {edoc.cufe}</p>}
+              {edocQr && <div className="mx-auto w-28" dangerouslySetInnerHTML={{ __html: edocQr }} />}
+            </div>
+          ) : edoc ? (
+            <p>Documento electrónico en proceso de emisión.</p>
+          ) : (
+            <p>Documento no válido como factura electrónica.</p>
+          )}
           {ctx.tenant.receipt_footer && <p className="mt-1">{ctx.tenant.receipt_footer}</p>}
         </>
       }

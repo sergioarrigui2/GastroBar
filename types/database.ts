@@ -15,6 +15,9 @@ export type MeasureUnit = 'g' | 'ml' | 'unit';
 export type PaymentMethod = 'cash' | 'card' | 'transfer' | 'other';
 export type SplitType = 'full' | 'by_item' | 'equal' | 'custom';
 export type MovementType = 'sale' | 'sale_reversal' | 'waste' | 'purchase' | 'adjustment';
+export type EInvoiceProviderId = 'simulator' | 'alegra' | 'siigo';
+export type EInvoiceDocType = 'pos' | 'invoice' | 'credit_note';
+export type EInvoiceStatus = 'pending' | 'processing' | 'accepted' | 'rejected' | 'error' | 'cancelled';
 export type OrderSource = 'pos' | 'ai_agent' | 'qr';
 
 export type AppliedModifier = { id: string; name: string; price_delta: number };
@@ -39,6 +42,10 @@ type TenantRow = {
   tax_name: string;
   tax_rate: number;
   prices_include_tax: boolean;
+  einvoice_enabled: boolean;
+  einvoice_provider: EInvoiceProviderId | 'none';
+  einvoice_environment: 'test' | 'production';
+  einvoice_default_doc: 'pos' | 'invoice';
 };
 
 type ProfileRow = {
@@ -157,6 +164,7 @@ type OrderRow = {
   discount_by: string | null;
   discount_total: number;
   tax_total: number;
+  billing_customer: Json | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -271,6 +279,43 @@ type CashMovementRow = {
   created_at: string;
 };
 
+type EInvoiceCredentialsRow = {
+  tenant_id: string;
+  provider: EInvoiceProviderId;
+  encrypted_config: string;
+  config_hint: string | null;
+  updated_by: string | null;
+  updated_at: string;
+};
+
+type EInvoiceDocumentRow = {
+  id: string;
+  tenant_id: string;
+  order_id: string;
+  doc_type: EInvoiceDocType;
+  status: EInvoiceStatus;
+  provider: string;
+  environment: string;
+  related_document_id: string | null;
+  reason: string | null;
+  customer: Json | null;
+  payload: Json;
+  attempts: number;
+  next_attempt_at: string;
+  last_error: string | null;
+  provider_document_id: string | null;
+  number: string | null;
+  cufe: string | null;
+  qr_data: string | null;
+  pdf_url: string | null;
+  xml_url: string | null;
+  issued_at: string | null;
+  credited_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type ProductAvailabilityRow = {
   product_id: string;
   tenant_id: string;
@@ -320,6 +365,8 @@ export type Database = {
       api_keys: Table<ApiKeyRow, 'profile_id' | 'name' | 'key_prefix' | 'key_hash'>;
       cash_sessions: Table<CashSessionRow, never>;
       cash_movements: Table<CashMovementRow, 'session_id' | 'movement_type' | 'amount' | 'reason'>;
+      einvoice_credentials: Table<EInvoiceCredentialsRow, 'tenant_id' | 'provider' | 'encrypted_config'>;
+      einvoice_documents: Table<EInvoiceDocumentRow, 'order_id' | 'doc_type' | 'provider' | 'environment' | 'payload'>;
     };
     Views: {
       product_availability: { Row: ProductAvailabilityRow; Relationships: [] };
@@ -378,6 +425,9 @@ export type Database = {
       get_cash_session: { Args: { p_session_id?: string | null }; Returns: Json };
       close_cash_session: { Args: { p_counted_cash: number; p_notes?: string | null }; Returns: Json };
       get_public_menu: { Args: { p_slug: string }; Returns: Json };
+      set_billing_customer: { Args: { p_order_id: string; p_customer: Json | null }; Returns: undefined };
+      retry_einvoice_document: { Args: { p_document_id: string }; Returns: undefined };
+      enqueue_missing_einvoices: { Args: { p_since?: string }; Returns: number };
       void_payment: { Args: { p_payment_id: string; p_reason: string }; Returns: Json };
       get_shift_metrics: {
         Args: { p_from?: string; p_to?: string };

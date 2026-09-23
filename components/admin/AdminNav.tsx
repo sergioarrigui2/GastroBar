@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart3, BookOpen, ChefHat, LayoutGrid, Martini, Package, QrCode, Settings, Smartphone, Users, Wallet } from 'lucide-react';
+import { BarChart3, BookOpen, ChefHat, FileCheck2, LayoutGrid, Martini, Package, QrCode, Settings, Smartphone, Users, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -12,6 +12,7 @@ const LINKS = [
   { href: '/admin/floor', label: 'Salón y mesas', icon: LayoutGrid },
   { href: '/admin/qr', label: 'Menú QR', icon: QrCode },
   { href: '/admin/staff', label: 'Personal', icon: Users },
+  { href: '/admin/einvoicing', label: 'Facturación', icon: FileCheck2 },
   { href: '/admin/settings', label: 'Ajustes', icon: Settings },
   { href: '/cash', label: 'Caja', icon: Wallet },
   { href: '/waiter', label: 'Comandero', icon: Smartphone },

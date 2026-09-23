@@ -38,7 +38,8 @@ lib/
 supabase/
   schema.sql            Tablas, enums, RLS, triggers, RPCs, vista, Realtime
   migrations/           Cambios para bases ya creadas (002 catálogo · 003 caja, claves API, QR,
-                        imágenes · 004 impuestos, cortesías, descuentos, anulaciones)
+                        imágenes · 004 impuestos, cortesías, descuentos, anulaciones ·
+                        005 facturación electrónica)
   seed.sql              Menú, mesas, insumos y recetas demo
 tests/                  Motor de split-bill + integración SQL (PGlite)
 types/                  Tipos de base de datos y dominio
@@ -111,6 +112,27 @@ types/                  Tipos de base de datos y dominio
 - **Descuento de cuenta:** porcentaje o monto fijo, con motivo, solo admin o caja. El impuesto se prorratea sobre el total con descuento.
 - **Anulación de pagos:** solo el admin, con motivo. La cuenta se reabre con el saldo pendiente y la mesa vuelve a ocupada. Se hace desde *Cuenta* en el comandero o desde *Caja → Cuentas pagadas*. Se bloquea si el pago pertenece a una caja ya cerrada, para no alterar un reporte Z.
 - **Reportes:** métricas, cortes X y reportes Z incluyen descuentos, cortesías, impuestos y pagos anulados. Los pagos anulados no cuentan como venta.
+
+## Facturación electrónica
+
+Viene **desactivada**; se activa por gastrobar en *Admin → Facturación*. Apagada, el POS funciona exactamente igual.
+
+- **No bloqueante:** cuando una cuenta queda pagada, un trigger **encola** el documento con un snapshot congelado (ítems, impuestos por tarifa, descuentos y pagos). El envío al proveedor ocurre **después de responder al usuario** (`after()` de Next.js). Si el proveedor o la DIAN fallan, el documento se reintenta con backoff y nunca bloquea el cobro. Además, `/api/cron/einvoice` reprocesa la cola (Vercel Cron, ver `vercel.json`).
+- **Tipo de documento:** si al cobrar se capturan los datos del cliente (NIT o cédula, nombre, correo), se emite **factura electrónica**; si no, **documento equivalente POS** (configurable).
+- **Anulaciones:** anular un pago de una cuenta ya aceptada genera una **nota crédito**. Si el documento aún no se había enviado, se cancela.
+- **Proveedores:**
+  - **Simulador:** funcional, solo para pruebas. Genera número, CUDE (SHA-384) y QR marcados como simulados.
+  - **Alegra y Siigo:** registrados con sus campos de credenciales, **pendientes de conectar**. Sus documentos quedan en cola con un mensaje explicativo.
+- **Credenciales:** se guardan cifradas con AES-256-GCM (`EINVOICE_ENCRYPTION_KEY`), solo las ve el admin y nunca llegan al navegador.
+- **Seguimiento:** panel con el estado de cada documento, reintento manual, "Generar faltantes" (para cuentas pagadas antes de activar la facturación) y actualización en tiempo real.
+
+### Conectar un proveedor real
+
+1. Implementar `issue()` y `testConnection()` en `lib/einvoice/providers/<proveedor>.ts`. Opcionalmente, `checkStatus()` si el proveedor responde de forma asíncrona. La entrada es un `EInvoiceRequest`, con el payload ya calculado, y la salida un `EInvoiceResult`.
+2. Cambiar `implemented: true`.
+3. Probarlo en el entorno de **pruebas / habilitación** del proveedor y luego pasar a producción desde el panel.
+
+Todo lo demás (cola, reintentos, notas crédito, recibos con CUFE/CUDE y QR, panel) ya funciona con cualquier conector.
 
 ## Modelo de seguridad multi-tenant
 
@@ -203,5 +225,5 @@ npm run typecheck
 
 ## Pendiente / siguientes pasos
 
-- **Facturación electrónica (DIAN):** requiere un proveedor tecnológico autorizado y sus credenciales. Hoy los recibos indican "Documento no válido como factura electrónica".
+- **Conectores de Alegra y Siigo:** la base de facturación electrónica está completa; falta implementar el envío de cada proveedor con sus credenciales de sandbox.
 - **Pedidos del cliente desde el QR:** el menú público es de solo lectura. Aceptar pedidos anónimos exige un token por mesa y la confirmación del mesero.

@@ -85,7 +85,7 @@ export function ComanderoMobile({
   snapshot,
   menu,
 }: {
-  tenant: { id: string; name: string; currency: string; locale: string; taxName: string };
+  tenant: { id: string; name: string; currency: string; locale: string; taxName: string; einvoiceEnabled: boolean };
   user: { name: string; role: AppRole };
   snapshot: TableStatusSnapshot;
   menu: MenuSnapshot;
@@ -698,6 +698,7 @@ export function ComanderoMobile({
               currency={tenant.currency}
               locale={tenant.locale}
               title={`Mesa ${table.label}`}
+              einvoiceEnabled={tenant.einvoiceEnabled}
               onRegistered={(result) => {
                 notify(result.status === 'paid' ? 'Cuenta pagada · mesa liberada' : `Pago registrado · saldo ${money(result.remaining)}`);
                 router.refresh();

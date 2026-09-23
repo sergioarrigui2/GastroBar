@@ -18,6 +18,7 @@ export default async function WaiterPage() {
         currency: ctx.tenant.currency,
         locale: ctx.tenant.locale,
         taxName: ctx.tenant.tax_name,
+        einvoiceEnabled: ctx.tenant.einvoice_enabled,
       }}
       user={{ name: ctx.profile.full_name, role: ctx.role }}
       snapshot={snapshot}

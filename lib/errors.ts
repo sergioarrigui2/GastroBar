@@ -36,6 +36,8 @@ const DB_ERROR_MESSAGES: Record<string, string> = {
   payment_not_found: 'Pago no encontrado',
   payment_already_voided: 'El pago ya estaba anulado',
   payment_in_closed_cash_session: 'El pago pertenece a una caja ya cerrada y no se puede anular',
+  einvoice_disabled: 'La facturación electrónica está desactivada',
+  einvoice_not_retryable: 'Sólo se pueden reintentar documentos con error o rechazados',
   api_key_requires_ai_agent: 'Las claves API sólo pueden asignarse a usuarios con rol Agente IA',
 };
 

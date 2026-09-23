@@ -5,7 +5,8 @@ import type { Database } from '@/types/database';
 
 /** /api/v1 se autentica con Bearer token (agentes), no con cookies. */
 /** /m/* es el menú QR público para clientes. */
-const PUBLIC_PATHS = ['/login', '/onboarding', '/auth', '/api/v1', '/m'];
+/** /api/cron valida su propio secreto (CRON_SECRET). */
+const PUBLIC_PATHS = ['/login', '/onboarding', '/auth', '/api/v1', '/api/cron', '/m'];
 
 /** Refresca la sesión de Supabase en cada request y protege las rutas privadas. */
 export async function updateSession(request: NextRequest): Promise<NextResponse> {

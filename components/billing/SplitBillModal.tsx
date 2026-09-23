@@ -1,7 +1,8 @@
 'use client';
 
-import { Banknote, Check, CreditCard, Landmark, Plus, Users, Wallet } from 'lucide-react';
+import { Banknote, Check, CreditCard, FileText, Landmark, Plus, Users, Wallet } from 'lucide-react';
 import { useMemo, useState, useTransition } from 'react';
+import { setBillingCustomerAction } from '@/app/actions/einvoice';
 import { registerPaymentsAction } from '@/app/actions/payments';
 import { Button, Input, Stepper } from '@/components/ui/primitives';
 import { Sheet } from '@/components/ui/Sheet';
@@ -15,6 +16,7 @@ import {
   type ItemAssignments,
   type SplitShare,
 } from '@/lib/billing/split-bill';
+import { billingCustomerSchema, type BillingCustomer } from '@/lib/einvoice/types';
 import { cn, formatCurrency } from '@/lib/utils';
 import type { PaymentMethod, RegisterPaymentsResult, SplitType, TableBill } from '@/types/domain';
 
@@ -56,6 +58,7 @@ export function SplitBillModal({
   locale,
   title,
   onRegistered,
+  einvoiceEnabled = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -64,7 +67,12 @@ export function SplitBillModal({
   locale: string;
   title: string;
   onRegistered: (result: RegisterPaymentsResult) => void;
+  /** Con facturación electrónica activa se ofrece capturar los datos del cliente. */
+  einvoiceEnabled?: boolean;
 }) {
+  const savedCustomer = bill.order.billing_customer as Partial<BillingCustomer> | null;
+  const [wantsInvoice, setWantsInvoice] = useState(Boolean(savedCustomer));
+  const [customer, setCustomer] = useState<Partial<BillingCustomer>>(savedCustomer ?? { id_type: 'CC' });
   const decimals = currencyDecimals(currency);
   const money = (n: number) => formatCurrency(n, currency, locale);
   const remaining = remainingBalance(bill.order.total, bill.order.paid_amount, decimals);
@@ -146,7 +154,25 @@ export function SplitBillModal({
       setError('Revisa la división: no hay montos válidos para cobrar');
       return;
     }
+    let customerToSave: BillingCustomer | null | undefined;
+    if (einvoiceEnabled && wantsInvoice) {
+      const parsed = billingCustomerSchema.safeParse(customer);
+      if (!parsed.success) {
+        setError('Completa los datos del cliente para la factura (documento, nombre y correo válidos)');
+        return;
+      }
+      customerToSave = parsed.data;
+    } else if (einvoiceEnabled && savedCustomer) {
+      customerToSave = null; // se desmarcó: vuelve a consumidor final
+    }
     startTransition(async () => {
+      if (customerToSave !== undefined) {
+        const saved = await setBillingCustomerAction(bill.order.id, customerToSave);
+        if (!saved.ok) {
+          setError(saved.error);
+          return;
+        }
+      }
       const result = await registerPaymentsAction({
         order_id: bill.order.id,
         split_type: mode,
@@ -195,6 +221,60 @@ export function SplitBillModal({
         </div>
       }
     >
+      {einvoiceEnabled && (
+        <section className="mb-4 rounded-2xl border border-zinc-200 p-3 dark:border-zinc-800">
+          <label className="flex items-center gap-3 text-sm font-semibold">
+            <input
+              type="checkbox"
+              className="size-5 accent-emerald-600"
+              checked={wantsInvoice}
+              onChange={(e) => setWantsInvoice(e.target.checked)}
+            />
+            <FileText className="size-4" /> Factura electrónica a nombre del cliente
+          </label>
+          {!wantsInvoice && <p className="mt-1 pl-8 text-xs text-zinc-500">Sin datos se emite documento POS a consumidor final.</p>}
+          {wantsInvoice && (
+            <div className="mt-3 grid grid-cols-[6rem_1fr] gap-2">
+              <select
+                aria-label="Tipo de documento"
+                value={customer.id_type ?? 'CC'}
+                onChange={(e) => setCustomer((c) => ({ ...c, id_type: e.target.value as BillingCustomer['id_type'] }))}
+                className="h-11 rounded-xl border border-zinc-300 bg-white px-2 dark:border-zinc-700 dark:bg-zinc-900"
+              >
+                {(['CC', 'NIT', 'CE', 'PP', 'TI', 'NIT_EXT'] as const).map((t) => (
+                  <option key={t} value={t}>
+                    {t === 'NIT_EXT' ? 'NIT ext.' : t}
+                  </option>
+                ))}
+              </select>
+              <Input
+                inputMode="numeric"
+                placeholder="Número de documento"
+                aria-label="Número de documento"
+                value={customer.id_number ?? ''}
+                onChange={(e) => setCustomer((c) => ({ ...c, id_number: e.target.value }))}
+              />
+              <Input
+                className="col-span-2"
+                placeholder="Nombre o razón social"
+                aria-label="Nombre o razón social"
+                value={customer.name ?? ''}
+                onChange={(e) => setCustomer((c) => ({ ...c, name: e.target.value }))}
+              />
+              <Input
+                className="col-span-2"
+                type="email"
+                inputMode="email"
+                placeholder="Correo para enviar la factura"
+                aria-label="Correo"
+                value={customer.email ?? ''}
+                onChange={(e) => setCustomer((c) => ({ ...c, email: e.target.value }))}
+              />
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Selector de modo */}
       <div role="tablist" aria-label="Tipo de división" className="mb-4 grid grid-cols-4 gap-1 rounded-2xl bg-zinc-100 p-1 dark:bg-zinc-800">
         {MODES.map((m) => (
