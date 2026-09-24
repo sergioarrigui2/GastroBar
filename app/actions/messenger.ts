@@ -1,0 +1,20 @@
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import type { z } from 'zod';
+import { runAction } from '@/lib/actions';
+import { messengerSettingsSchema, saveMessengerSettings, sendDigestNow } from '@/lib/services/messenger';
+
+const PATH = '/admin/ai/mensajero';
+
+export async function saveMessengerSettingsAction(input: z.input<typeof messengerSettingsSchema>) {
+  const result = await runAction(['admin'], (ctx) => saveMessengerSettings(ctx, input));
+  if (result.ok) revalidatePath(PATH);
+  return result;
+}
+
+export async function sendDigestNowAction() {
+  const result = await runAction(['admin'], (ctx) => sendDigestNow(ctx));
+  revalidatePath(PATH);
+  return result;
+}

@@ -11,7 +11,10 @@ import {
 } from '@/app/actions/catalog';
 import { Badge, Button, Card, Input, Label, Select } from '@/components/ui/primitives';
 import { Sheet } from '@/components/ui/Sheet';
+import { MENU_CLASS_LABEL } from '@/lib/analytics/analyze';
+import type { MenuClass } from '@/lib/analytics/types';
 import { costProduct, foodCostLevel, netOfTax } from '@/lib/catalog/costing';
+import type { MenuInsight } from '@/lib/services/agent-notices';
 import type { CatalogSnapshot } from '@/lib/services/catalog';
 import { cn } from '@/lib/utils';
 import type { Tables } from '@/types/database';
@@ -32,7 +35,23 @@ const LEVEL_STYLES = {
 /** Food cost objetivo para sugerir precio. */
 const TARGET_FOOD_COST = 25;
 
-export function ProductsPanel({ catalog, lookups }: { catalog: CatalogSnapshot; lookups: CatalogLookups }) {
+const CLASS_BADGE: Record<MenuClass, { emoji: string; className: string }> = {
+  star: { emoji: '⭐', className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200' },
+  plowhorse: { emoji: '🐴', className: 'bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-200' },
+  puzzle: { emoji: '❓', className: 'bg-violet-100 text-violet-800 dark:bg-violet-500/15 dark:text-violet-200' },
+  dog: { emoji: '🐕', className: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-700/60 dark:text-zinc-200' },
+};
+
+export function ProductsPanel({
+  catalog,
+  lookups,
+  insights = {},
+}: {
+  catalog: CatalogSnapshot;
+  lookups: CatalogLookups;
+  /** Clasificación del Ingeniero de menú (últimos 30 días) por producto. */
+  insights?: Record<string, MenuInsight>;
+}) {
   const { money, ingredientMap, subRecipeMap } = lookups;
   const { pending, flash, run } = useAdminMutation();
   const [search, setSearch] = useState('');
@@ -123,6 +142,14 @@ export function ProductsPanel({ catalog, lookups }: { catalog: CatalogSnapshot; 
                           {category?.name} · {lines > 0 ? `${lines} insumo(s)` : 'sin receta'}
                           {!p.track_stock && ' · sin control de stock'}
                         </span>
+                        {insights[p.id] && (
+                          <span
+                            title={`Ingeniero de menú (30 días): ${insights[p.id]!.quantity} vendidos, ${insights[p.id]!.mix_pct}% del mix, margen ${money(insights[p.id]!.unit_margin)} por unidad`}
+                            className={cn('mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold', CLASS_BADGE[insights[p.id]!.class].className)}
+                          >
+                            {CLASS_BADGE[insights[p.id]!.class].emoji} {MENU_CLASS_LABEL[insights[p.id]!.class]}
+                          </span>
+                        )}
                         </span>
                       </button>
                     </td>

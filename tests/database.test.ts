@@ -581,3 +581,33 @@ describe('agente comprador', () => {
     assert.equal(otherAdmin!.c, 0);
   });
 });
+
+describe('mensajero', () => {
+  const range = [new Date(Date.now() - 7 * 86_400_000).toISOString(), new Date(Date.now() + 60_000).toISOString()];
+
+  test('el resumen del negocio acepta un gastrobar explícito sólo con el rol de servicio', async () => {
+    await assert.rejects(as(ADMIN_A, `select public.get_business_snapshot($1, $2, $3)`, [...range, ids.tenantA]), /forbidden/);
+    await db.exec(`reset role; select set_config('request.jwt.claim.sub', '', false); set role service_role;`);
+    try {
+      const { rows } = await db.query<{ s: any }>(`select public.get_business_snapshot($1, $2, $3) as s`, [...range, ids.tenantA]);
+      const mine = await one<{ s: any }>(ADMIN_A, `select public.get_business_snapshot($1, $2) as s`, range);
+      assert.equal(rows[0]!.s.kpis.orders, mine.s.kpis.orders);
+      assert.ok(rows[0]!.s.kpis.orders > 0);
+    } finally {
+      await db.exec('reset role');
+    }
+  });
+
+  test('destinatarios y envíos: sólo el admin de su gastrobar', async () => {
+    await as(ADMIN_A, `insert into messenger_settings (emails, whatsapp_phone) values ('{dueno@bar-a.co}', '573001112233')`);
+    await as(ADMIN_A, `insert into messenger_deliveries (recipients, subject, status) values ('{dueno@bar-a.co}', 'Resumen', 'sent')`);
+    await as(ADMIN_A, `insert into agent_schedules (agent, is_active, frequency, weekday, hour) values ('messenger', true, 'weekly', 1, 7)`);
+    const [s] = await as<{ emails: string[] }>(ADMIN_A, `select emails from messenger_settings`);
+    assert.deepEqual(s!.emails, ['dueno@bar-a.co']);
+    const [w] = await as<{ c: number }>(WAITER_A, `select count(*)::int as c from messenger_settings`);
+    assert.equal(w!.c, 0);
+    const [b] = await as<{ c: number }>(ADMIN_B, `select count(*)::int as c from messenger_deliveries`);
+    assert.equal(b!.c, 0);
+    await assert.rejects(as(WAITER_A, `insert into messenger_deliveries (recipients, subject, status) values ('{x@y.co}', 'x', 'sent')`), /row-level security/);
+  });
+});

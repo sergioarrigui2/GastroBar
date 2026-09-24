@@ -40,7 +40,7 @@ supabase/
   migrations/           Cambios para bases ya creadas (002 catálogo · 003 caja, claves API, QR,
                         imágenes · 004 impuestos, cortesías, descuentos, anulaciones ·
                         005 facturación electrónica · 006 análisis · 007 informes y costos IA ·
-                        008 planes de IA · 009 Comprador)
+                        008 planes de IA · 009 Comprador · 010 Mensajero)
   seed.sql              Menú, mesas, insumos y recetas demo
 tests/                  Motor de split-bill + integración SQL (PGlite)
 types/                  Tipos de base de datos y dominio
@@ -177,7 +177,7 @@ Todo lo demás (cola, reintentos, notas crédito, recibos con CUFE/CUDE y QR, pa
 | Vigía | Alertas de caja, inventario, descuentos, anulaciones y demoras | No (reglas) |
 | Ingeniero de menú | Estrella, caballo de batalla, enigma, perro | No (cálculo) |
 | Comprador | Pedido de compras por pronóstico, programable | No (cálculo); revisión opcional con Haiku |
-| Mensajero | Próximamente | — |
+| Mensajero | Resumen por correo (Resend) y WhatsApp, programable | No |
 
 - **Plata detectada** (`lib/analytics/value.ts`): faltantes de caja, faltantes de inventario, mermas, sobrecosto de productos con food cost alto (vs. objetivo 35 %) y descuentos por encima del promedio del equipo. Sólo cifras exactas, nunca estimaciones del modelo. Se muestra junto al gasto de IA del mes.
 - **Resumen del día** en la portada del admin (`lib/analytics/briefing.ts`): hasta 3 puntos del último informe (si tiene 8 días o menos) completados con alertas del Vigía. **No llama al modelo.**
@@ -243,6 +243,26 @@ select cron.schedule('gastrobar-agents', '5 * * * *', $$
   );
 $$);
 ```
+
+## Presentación de los agentes, avisos en los módulos y Mensajero
+
+Cada agente tiene su página (`/admin/ai/<agente>`) donde **se presenta en primera persona**: quién es, qué hace, cómo trabaja, qué gana el negocio, cuánto cuesta, dónde aparece y **su trabajo real del mes** con cifras (`lib/ai/agents.ts` es la fuente única del texto; `lib/services/agent-stats.ts` calcula las cifras sin IA).
+
+### Avisos dentro de los módulos (sin IA, últimos 30 días)
+| Módulo | Agente | Qué muestra |
+|---|---|---|
+| Menú | Ingeniero de menú | Insignia ⭐ 🐴 ❓ 🐕 en cada producto + aviso de perros, caballos de batalla caros, enigmas y productos sin ventas |
+| Inventario | Vigía + Comprador | Faltantes de inventario, mermas, stock bajo e insumos que se agotan antes de la próxima entrega |
+| Caja (sólo admin) | Vigía | Cierres con diferencia y quién los cerró |
+| Personal | Vigía | Descuentos, cortesías y anulaciones fuera de lo normal por persona |
+
+Si un agente falla (por ejemplo, faltan migraciones), el módulo se ve normal sin el aviso.
+
+### Mensajero (`/admin/ai/mensajero`)
+- Resumen de los últimos 7 días (ventas, cuentas, ticket y food cost frente a la semana anterior; puntos a revisar del Vigía, el Analista y el Comprador; plata detectada) armado **sin IA** (`lib/messenger/digest.ts`).
+- **Correo** con Resend a hasta 5 destinatarios, manual (máx. 5 al día) o programado (diario, semanal, quincenal o mensual) por el mismo cron de agentes; cada envío queda registrado (`messenger_deliveries`, migración 010).
+- **WhatsApp**: botones "Enviar a mi WhatsApp" y "Compartir por WhatsApp" con el mismo resumen en texto, sin costo.
+- La migración 010 permite que `get_business_snapshot` reciba un gastrobar explícito **sólo con el rol de servicio**, para el envío programado.
 
 ## Capa de herramientas para agentes de IA
 

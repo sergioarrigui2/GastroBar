@@ -386,7 +386,7 @@ type SupplierRow = {
 type AgentScheduleRow = {
   id: string;
   tenant_id: string;
-  agent: 'purchase';
+  agent: 'purchase' | 'messenger';
   is_active: boolean;
   frequency: 'daily' | 'weekly' | 'biweekly' | 'monthly';
   weekday: number;
@@ -416,6 +416,27 @@ type PurchaseSuggestionRow = {
   created_at: string;
   received_at: string | null;
   received_by: string | null;
+};
+
+type MessengerSettingsRow = {
+  tenant_id: string;
+  emails: string[];
+  whatsapp_phone: string | null;
+  updated_at: string;
+};
+
+type MessengerDeliveryRow = {
+  id: string;
+  tenant_id: string;
+  channel: 'email';
+  trigger: 'manual' | 'schedule';
+  recipients: string[];
+  subject: string;
+  status: 'sent' | 'error';
+  provider_id: string | null;
+  error: string | null;
+  created_by: string | null;
+  created_at: string;
 };
 
 type ProductAvailabilityRow = {
@@ -473,6 +494,8 @@ export type Database = {
       ai_usage: Table<AiUsageRow, 'feature' | 'model', never>;
       tenant_ai_plans: Table<TenantAiPlanRow, 'tenant_id', never>;
       suppliers: Table<SupplierRow, 'name'>;
+      messenger_settings: Table<MessengerSettingsRow, 'tenant_id'>;
+      messenger_deliveries: Table<MessengerDeliveryRow, 'subject' | 'status', never>;
       agent_schedules: Table<AgentScheduleRow, 'agent'>;
       purchase_suggestions: Table<PurchaseSuggestionRow, 'horizon_days' | 'coverage_from' | 'coverage_to' | 'history_days'>;
     };
@@ -542,7 +565,7 @@ export type Database = {
         Returns: Json;
       };
       get_business_snapshot: {
-        Args: { p_from: string; p_to: string };
+        Args: { p_from: string; p_to: string; p_tenant?: string };
         Returns: Json;
       };
       get_purchase_inputs: {

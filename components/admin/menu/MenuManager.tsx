@@ -6,6 +6,7 @@ import type { CatalogSnapshot } from '@/lib/services/catalog';
 import { cn, formatCurrency } from '@/lib/utils';
 import { CategoriesPanel } from './CategoriesPanel';
 import { ModifiersPanel } from './ModifiersPanel';
+import type { MenuInsight } from '@/lib/services/agent-notices';
 import { ProductsPanel } from './ProductsPanel';
 import { SubRecipesPanel } from './SubRecipesPanel';
 
@@ -35,6 +36,7 @@ export function MenuManager({
   currency,
   locale,
   initialTab,
+  insights,
 }: {
   tenantId: string;
   tax: CatalogLookups['tax'];
@@ -42,6 +44,7 @@ export function MenuManager({
   currency: string;
   locale: string;
   initialTab: Tab;
+  insights?: Record<string, MenuInsight>;
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
 
@@ -88,7 +91,7 @@ export function MenuManager({
         </nav>
       </div>
 
-      {tab === 'products' && <ProductsPanel catalog={catalog} lookups={lookups} />}
+      {tab === 'products' && <ProductsPanel catalog={catalog} lookups={lookups} insights={insights} />}
       {tab === 'categories' && <CategoriesPanel catalog={catalog} />}
       {tab === 'modifiers' && <ModifiersPanel catalog={catalog} lookups={lookups} />}
       {tab === 'sub-recipes' && <SubRecipesPanel catalog={catalog} lookups={lookups} />}

@@ -18,6 +18,7 @@ function AgentCard({
   children,
   href,
   cta,
+  profile,
 }: {
   icon: ReactNode;
   name: string;
@@ -28,13 +29,17 @@ function AgentCard({
   children?: ReactNode;
   href?: string;
   cta?: string;
+  /** Ruta de la presentación del agente. */
+  profile: string;
 }) {
   return (
     <Card className={cn('flex flex-col gap-3', statusTone === 'soon' && 'opacity-75')}>
       <div className="flex items-start gap-3">
         <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand-100 text-brand-600 dark:bg-brand-500/15">{icon}</div>
         <div className="min-w-0 flex-1">
-          <p className="font-bold">{name}</p>
+          <Link href={profile} className="font-bold hover:underline">
+            {name}
+          </Link>
           <p className="text-sm text-zinc-500">{role}</p>
         </div>
         <Badge
@@ -50,11 +55,16 @@ function AgentCard({
       {children && <div className="text-sm">{children}</div>}
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 pt-3 text-xs text-zinc-500 dark:border-zinc-800">
         <span>{cost}</span>
-        {href && cta && (
-          <Link href={href} className="font-semibold text-brand-600 hover:underline">
-            {cta} →
+        <span className="flex gap-3">
+          <Link href={profile} className="font-semibold text-zinc-600 hover:underline dark:text-zinc-300">
+            Conóceme
           </Link>
-        )}
+          {href && cta && (
+            <Link href={href} className="font-semibold text-brand-600 hover:underline">
+              {cta} →
+            </Link>
+          )}
+        </span>
       </div>
     </Card>
   );
@@ -169,6 +179,7 @@ export function AiTeamView({
           <AgentCard
             icon={<BrainCircuit className="size-6" />}
             name="Analista"
+            profile="/admin/ai/analista"
             role="Revisa ventas, menú, equipo, caja e inventario y te dice qué hacer."
             status={o.configured ? 'Activo' : 'Sin configurar'}
             statusTone={o.configured ? 'active' : 'soon'}
@@ -192,6 +203,7 @@ export function AiTeamView({
           <AgentCard
             icon={<ShieldAlert className="size-6" />}
             name="Vigía"
+            profile="/admin/ai/vigia"
             role="Vigila caja, faltantes de inventario, descuentos, anulaciones y demoras todo el tiempo."
             status="Activo · sin costo"
             statusTone="free"
@@ -205,6 +217,7 @@ export function AiTeamView({
           <AgentCard
             icon={<ChefHat className="size-6" />}
             name="Ingeniero de menú"
+            profile="/admin/ai/ingeniero"
             role="Clasifica cada producto en estrella, caballo de batalla, enigma o perro según ventas y margen real."
             status="Activo · sin costo"
             statusTone="free"
@@ -216,6 +229,7 @@ export function AiTeamView({
           <AgentCard
             icon={<ShoppingCart className="size-6" />}
             name="Comprador"
+            profile="/admin/ai/comprador"
             role="Arma tu pedido de compras según lo que vas a vender, a la hora que tú programes."
             status={o.purchase.active ? 'Programado · sin costo' : 'Activo · sin costo'}
             statusTone="free"
@@ -254,10 +268,13 @@ export function AiTeamView({
           <AgentCard
             icon={<CalendarClock className="size-6" />}
             name="Mensajero"
-            role="Te envía el resumen semanal por WhatsApp o correo el lunes a primera hora."
-            status="Próximamente"
-            statusTone="soon"
-            cost="Reutiliza el último informe · no gasta cupo"
+            profile="/admin/ai/mensajero"
+            role="Te lleva el resumen de tu negocio a tu correo y a tu WhatsApp, a la hora que elijas."
+            status="Activo · sin costo"
+            statusTone="free"
+            cost="Reutiliza lo que ya calcularon los demás · no usa IA"
+            href="/admin/ai/mensajero"
+            cta="Configurar"
           />
         </div>
       </section>
