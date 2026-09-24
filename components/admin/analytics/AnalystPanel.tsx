@@ -1,38 +1,19 @@
 'use client';
 
-import { AlertOctagon, AlertTriangle, CheckCircle2, HelpCircle, Lightbulb, Loader2, ShieldCheck, Sparkles, TrendingUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, History, Loader2, Printer, Sparkles } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { generateAnalystReportAction } from '@/app/actions/analyst';
 import { Badge, Button, Card } from '@/components/ui/primitives';
-import type { AnalystReport, ReportVerification } from '@/lib/analyst/report';
 import { cn } from '@/lib/utils';
+import { HEALTH_BADGE, HEALTH_LABEL, ReportView, type StoredReport } from './ReportView';
 
-export type StoredReport = {
-  id: string;
-  range_key: string | null;
-  created_at: string;
-  created_label: string;
-  model: string;
-  content: AnalystReport;
-  verification: ReportVerification | null;
-  input_tokens: number | null;
-  output_tokens: number | null;
-  duration_ms: number | null;
-  cost_usd: number | null;
-};
+export type { StoredReport } from './ReportView';
 
-const HEALTH = {
-  good: { label: 'Negocio sano', className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200' },
-  watch: { label: 'Hay que vigilar', className: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200' },
-  critical: { label: 'Requiere acción', className: 'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-200' },
-} as const;
-
-const FINDING = {
-  critical: { icon: AlertOctagon, className: 'text-red-600', label: 'Crítico' },
-  warning: { icon: AlertTriangle, className: 'text-amber-600', label: 'Atención' },
-  opportunity: { icon: Lightbulb, className: 'text-sky-600', label: 'Oportunidad' },
-} as const;
+const CLOSED_KEY = 'gastrobar-analyst-closed';
+const linkBtn =
+  'inline-flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800';
 
 export function AnalystPanel({
   range,
@@ -48,6 +29,26 @@ export function AnalystPanel({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ tone: 'error' | 'info'; text: string } | null>(null);
+  // Abierto por defecto; si el usuario cierra un informe, se recuerda en este navegador
+  // hasta que haya uno nuevo.
+  const [open, setOpen] = useState(true);
+  useEffect(() => {
+    if (!report) return;
+    try {
+      setOpen(localStorage.getItem(CLOSED_KEY) !== report.id);
+    } catch {
+      setOpen(true);
+    }
+  }, [report?.id]);
+  const toggle = (next: boolean) => {
+    setOpen(next);
+    try {
+      if (next) localStorage.removeItem(CLOSED_KEY);
+      else if (report) localStorage.setItem(CLOSED_KEY, report.id);
+    } catch {
+      // Sin almacenamiento: el estado dura mientras la página esté abierta.
+    }
+  };
 
   const generate = () => {
     setMessage(null);
@@ -59,9 +60,6 @@ export function AnalystPanel({
     });
   };
 
-  const unverified = new Set(
-    (report?.verification?.unverified_numbers ?? []).filter((n) => n.section === 'findings').map((n) => n.index),
-  );
 
   return (
     <Card className="space-y-4 border-brand-400/40">
@@ -73,6 +71,9 @@ export function AnalystPanel({
             Interpreta las cifras de abajo y te dice qué hacer. Las cifras las calcula el sistema; la IA sólo las explica.
           </p>
         </div>
+        <Link href="/admin/analytics/reports" className={linkBtn}>
+          <History className="size-4" /> Historial
+        </Link>
         <Button onClick={generate} disabled={!configured || pending}>
           {pending ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
           {pending ? 'Analizando…' : report ? 'Generar nuevo informe' : 'Generar informe'}
@@ -102,113 +103,32 @@ export function AnalystPanel({
       )}
 
       {report ? (
-        <article className="space-y-5">
-          <header className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge className={HEALTH[report.content.health].className}>{HEALTH[report.content.health].label}</Badge>
-              <span className="text-xs text-zinc-500">{report.created_label}</span>
+        open ? (
+          <>
+            <ReportView report={report} />
+            <div className="flex flex-wrap gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+              <Button variant="secondary" onClick={() => toggle(false)}>
+                <ChevronUp className="size-4" /> Cerrar informe
+              </Button>
+              <Link href={`/admin/analytics/reports/${report.id}`} className={linkBtn}>
+                <Printer className="size-4" /> Ver para imprimir
+              </Link>
             </div>
-            <h3 className="text-xl font-bold text-balance">{report.content.headline}</h3>
-            <p className="leading-relaxed text-zinc-700 dark:text-zinc-300">{report.content.summary}</p>
-          </header>
-
-          {report.content.highlights.length > 0 && (
-            <section>
-              <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-zinc-500">
-                <TrendingUp className="size-4" aria-hidden /> Lo que va bien
-              </h4>
-              <ul className="space-y-2">
-                {report.content.highlights.map((h, i) => (
-                  <li key={i} className="flex gap-2">
-                    <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden />
-                    <p>
-                      <b>{h.title}.</b> <span className="text-zinc-600 dark:text-zinc-400">{h.evidence}</span>
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          <section>
-            <h4 className="mb-2 text-sm font-semibold uppercase tracking-wide text-zinc-500">Hallazgos y acciones</h4>
-            <ol className="space-y-3">
-              {report.content.findings.map((f, i) => {
-                const meta = FINDING[f.severity];
-                const Icon = meta.icon;
-                return (
-                  <li key={i} className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-                    <div className="mb-2 flex flex-wrap items-start gap-2">
-                      <Icon className={cn('mt-0.5 size-5 shrink-0', meta.className)} aria-label={meta.label} />
-                      <p className="mr-auto font-semibold">{f.title}</p>
-                      {unverified.has(i) && (
-                        <Badge className="bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200">Cifras sin verificar</Badge>
-                      )}
-                    </div>
-                    <dl className="grid gap-2 text-sm sm:grid-cols-[6rem_1fr]">
-                      <dt className="text-zinc-500">Datos</dt>
-                      <dd>{f.evidence}</dd>
-                      <dt className="text-zinc-500">Impacto</dt>
-                      <dd>{f.impact}</dd>
-                      <dt className="font-semibold text-brand-600">Qué hacer</dt>
-                      <dd className="font-medium">{f.action}</dd>
-                    </dl>
-                  </li>
-                );
-              })}
-            </ol>
-          </section>
-
-          {report.content.menu_actions.length > 0 && (
-            <section>
-              <h4 className="mb-2 text-sm font-semibold uppercase tracking-wide text-zinc-500">Decisiones de menú</h4>
-              <ul className="divide-y divide-zinc-100 text-sm dark:divide-zinc-800">
-                {report.content.menu_actions.map((m, i) => (
-                  <li key={i} className="grid gap-1 py-2 sm:grid-cols-[12rem_1fr]">
-                    <b>{m.product}</b>
-                    <span>{m.action}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {report.content.questions.length > 0 && (
-            <section>
-              <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-zinc-500">
-                <HelpCircle className="size-4" aria-hidden /> Preguntas para ti
-              </h4>
-              <ul className="list-disc space-y-1 pl-5 text-sm">
-                {report.content.questions.map((q, i) => (
-                  <li key={i}>{q}</li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-zinc-200 pt-3 text-xs text-zinc-500 dark:border-zinc-800">
-            {report.verification?.ok ? (
-              <span className="flex items-center gap-1 text-emerald-600">
-                <ShieldCheck className="size-3.5" aria-hidden /> Todas las cifras citadas coinciden con tus datos
-              </span>
-            ) : (
-              <span className="flex items-center gap-1 text-amber-600">
-                <AlertTriangle className="size-3.5" aria-hidden /> Algunas cifras no se pudieron verificar: contrástalas con el tablero
-              </span>
-            )}
-            <span>Modelo {report.model}</span>
-            {report.input_tokens !== null && (
-              <span>
-                {report.input_tokens.toLocaleString()} + {report.output_tokens?.toLocaleString()} tokens
-              </span>
-            )}
-            {report.duration_ms !== null && <span>{Math.round(report.duration_ms / 1000)} s</span>}
-            {report.cost_usd !== null && <span>Costo USD {Number(report.cost_usd).toFixed(3)}</span>}
-            <a href="/admin/ai-usage" className="font-medium text-brand-600 hover:underline">
-              Ver consumo de IA
-            </a>
-          </footer>
-        </article>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => toggle(true)}
+            className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-zinc-50 p-3 text-left hover:bg-zinc-100 dark:bg-zinc-800/40 dark:hover:bg-zinc-800"
+          >
+            <Badge className={HEALTH_BADGE[report.content.health]}>{HEALTH_LABEL[report.content.health]}</Badge>
+            <span className="min-w-0 flex-1 font-semibold">{report.content.headline}</span>
+            <span className="flex items-center gap-1 text-sm font-medium text-brand-600">
+              <ChevronDown className="size-4" /> Ver informe
+            </span>
+            <span className="w-full text-xs text-zinc-500">{report.created_label}</span>
+          </button>
+        )
       ) : (
         configured &&
         !pending && (
