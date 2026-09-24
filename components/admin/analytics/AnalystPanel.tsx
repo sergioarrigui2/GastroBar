@@ -20,11 +20,13 @@ export function AnalystPanel({
   rangeLabel,
   configured,
   report,
+  quota,
 }: {
   range: '7d' | '30d' | '90d';
   rangeLabel: string;
   configured: boolean;
   report: StoredReport | null;
+  quota: { plan: string; left: number; total: number; blockedReason: string | null };
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -74,12 +76,18 @@ export function AnalystPanel({
         <Link href="/admin/analytics/reports" className={linkBtn}>
           <History className="size-4" /> Historial
         </Link>
-        <Button onClick={generate} disabled={!configured || pending}>
+        <Button onClick={generate} disabled={!configured || pending || quota.blockedReason !== null}>
           {pending ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
           {pending ? 'Analizando…' : report ? 'Generar nuevo informe' : 'Generar informe'}
         </Button>
       </div>
 
+      {configured && (
+        <p className={cn('text-xs', quota.blockedReason ? 'font-medium text-amber-700 dark:text-amber-300' : 'text-zinc-500')}>
+          {quota.blockedReason ??
+            `Plan ${quota.plan} · te quedan ${quota.left} de ${quota.total} informes este mes. Repetir un informe sin datos nuevos no consume cupo.`}
+        </p>
+      )}
       {!configured && (
         <p className="rounded-xl bg-amber-100 p-3 text-sm text-amber-900 dark:bg-amber-500/15 dark:text-amber-200">
           Para activar el analista, el administrador de la plataforma debe configurar <code>ANTHROPIC_API_KEY</code> en el servidor.

@@ -515,3 +515,19 @@ describe('registro de costos de IA', () => {
     assert.equal(Number(after!.cost), 0.03643);
   });
 });
+
+describe('planes de IA', () => {
+  test('el admin lee su plan pero no puede asignárselo ni cambiarlo', async () => {
+    await assert.rejects(as(ADMIN_A, `insert into tenant_ai_plans (tenant_id, plan) values ($1, 'premium')`, [ids.tenantA]), /row-level security/);
+    await db.exec(`insert into public.tenant_ai_plans (tenant_id, plan, reports_per_month) values ('${ids.tenantA}', 'pro', 12)`);
+    const [mine] = await as<{ plan: string; reports_per_month: number }>(ADMIN_A, `select plan, reports_per_month from tenant_ai_plans`);
+    assert.deepEqual(mine, { plan: 'pro', reports_per_month: 12 });
+    await as(ADMIN_A, `update tenant_ai_plans set reports_per_month = 999`);
+    const [after] = await as<{ reports_per_month: number }>(ADMIN_A, `select reports_per_month from tenant_ai_plans`);
+    assert.equal(after!.reports_per_month, 12);
+    const [waiter] = await as<{ c: number }>(WAITER_A, `select count(*)::int as c from tenant_ai_plans`);
+    assert.equal(waiter!.c, 0);
+    const [other] = await as<{ c: number }>(ADMIN_B, `select count(*)::int as c from tenant_ai_plans`);
+    assert.equal(other!.c, 0);
+  });
+});

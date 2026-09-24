@@ -39,7 +39,8 @@ supabase/
   schema.sql            Tablas, enums, RLS, triggers, RPCs, vista, Realtime
   migrations/           Cambios para bases ya creadas (002 catálogo · 003 caja, claves API, QR,
                         imágenes · 004 impuestos, cortesías, descuentos, anulaciones ·
-                        005 facturación electrónica · 006 análisis · 007 informes IA)
+                        005 facturación electrónica · 006 análisis · 007 informes y costos IA ·
+                        008 planes de IA)
   seed.sql              Menú, mesas, insumos y recetas demo
 tests/                  Motor de split-bill + integración SQL (PGlite)
 types/                  Tipos de base de datos y dominio
@@ -165,6 +166,48 @@ Todo lo demás (cola, reintentos, notas crédito, recibos con CUFE/CUDE y QR, pa
   - **Registro de costos** (**Admin → Consumo IA**, tabla `ai_usage`, migración 007): una fila por cada llamada al modelo, incluidas las fallidas, con tokens de entrada, salida, razonamiento y caché, duración y costo en USD calculado con los precios oficiales (`lib/ai/pricing.ts`). El costo queda congelado en la fila; el registro no se puede editar ni borrar.
   - **Privacidad:** al modelo sólo le llegan cifras agregadas y nombres de productos y personal; nunca datos de clientes.
   - Requiere `ANTHROPIC_API_KEY` en el servidor; sin ella el tablero funciona y el informe queda desactivado.
+
+## Equipo IA, planes y control de costos
+
+**Admin → Equipo IA** (`/admin/ai`) presenta los agentes como parte del equipo, cada uno con su estado y su costo:
+
+| Agente | Qué hace | Usa IA |
+|---|---|---|
+| Analista | Informe con hallazgos y acciones | Sí, cuenta del cupo |
+| Vigía | Alertas de caja, inventario, descuentos, anulaciones y demoras | No (reglas) |
+| Ingeniero de menú | Estrella, caballo de batalla, enigma, perro | No (cálculo) |
+| Comprador, Mensajero | Próximamente | — |
+
+- **Plata detectada** (`lib/analytics/value.ts`): faltantes de caja, faltantes de inventario, mermas, sobrecosto de productos con food cost alto (vs. objetivo 35 %) y descuentos por encima del promedio del equipo. Sólo cifras exactas, nunca estimaciones del modelo. Se muestra junto al gasto de IA del mes.
+- **Resumen del día** en la portada del admin (`lib/analytics/briefing.ts`): hasta 3 puntos del último informe (si tiene 8 días o menos) completados con alertas del Vigía. **No llama al modelo.**
+
+### Cuándo se llama al modelo
+Sólo al pedir un informe, y sólo si: hay al menos 15 cuentas cerradas en el periodo, los datos cambiaron desde el último informe (si no, se reutiliza sin costo), queda cupo en el plan y no se superó el tope de gasto del mes.
+
+### Enrutamiento de modelos (`lib/ai/plans.ts`)
+Medido con datos reales: Haiku 4.5 ≈ USD 0,018 y Sonnet 5 (esfuerzo medio) ≈ USD 0,036 por informe.
+- `economy`: siempre Haiku. `premium`: siempre Sonnet.
+- `balanced`: Haiku para periodos simples; Sonnet si hay alertas críticas, 3 o más alertas, más de 31 días o muchos datos.
+- La corrección de cifras (segundo intento) siempre usa Haiku.
+
+### Planes vendibles
+| Plan | Informes/mes | Tope USD/mes | Modelos |
+|---|---|---|---|
+| Sin IA | 0 | 0 | — |
+| Prueba (por defecto) | 3 | 0,50 | economy |
+| Básico | 4 | 1 | economy |
+| Pro | 10 | 3 | balanced |
+| Premium | 30 | 10 | premium |
+
+El plan de cada gastrobar está en `tenant_ai_plans` (migración 008). Sólo el dueño de la plataforma lo cambia desde el SQL Editor; el administrador del gastrobar lo ve pero no puede modificarlo:
+
+```sql
+insert into public.tenant_ai_plans (tenant_id, plan, reports_per_month, monthly_budget_usd)
+values ((select id from public.tenants where slug = 'mi-gastrobar'), 'pro', null, null)
+on conflict (tenant_id) do update set plan = excluded.plan, reports_per_month = excluded.reports_per_month,
+  monthly_budget_usd = excluded.monthly_budget_usd, updated_at = now();
+```
+`reports_per_month`, `monthly_budget_usd` y `model_tier` son opcionales para armar paquetes a la medida.
 
 ## Capa de herramientas para agentes de IA
 

@@ -1,5 +1,6 @@
 import { AnalystPanel } from '@/components/admin/analytics/AnalystPanel';
 import { AnalyticsDashboard } from '@/components/admin/analytics/AnalyticsDashboard';
+import { getAiQuota } from '@/lib/ai/quota';
 import { isAnalystConfigured } from '@/lib/analyst/generate';
 import { ANALYSIS_RANGES, type AnalysisRangeKey, getBusinessAnalysis, rangeFromDays } from '@/lib/services/analytics';
 import { getLatestReport } from '@/lib/services/analyst-reports';
@@ -14,9 +15,10 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const { range: rawRange } = await searchParams;
   const range: AnalysisRangeKey = rawRange && rawRange in ANALYSIS_RANGES ? (rawRange as AnalysisRangeKey) : '30d';
 
-  const [analysis, report] = await Promise.all([
+  const [analysis, report, quota] = await Promise.all([
     getBusinessAnalysis(ctx, rangeFromDays(ANALYSIS_RANGES[range].days)),
     getLatestReport(ctx, range),
+    getAiQuota(ctx),
   ]);
 
   return (
@@ -31,6 +33,12 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
           rangeLabel={ANALYSIS_RANGES[range].label}
           configured={isAnalystConfigured()}
           report={report}
+          quota={{
+            plan: quota.plan.label,
+            left: quota.reportsLeft,
+            total: quota.plan.reportsPerMonth,
+            blockedReason: quota.blockedReason,
+          }}
         />
       }
     />

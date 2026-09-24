@@ -2,6 +2,8 @@ import 'server-only';
 import { createHash, randomUUID } from 'node:crypto';
 import { anthropic } from '@ai-sdk/anthropic';
 import { generateText, NoObjectGeneratedError, Output, type LanguageModelUsage, type ModelMessage } from 'ai';
+import { MODELS, pickAnalystModel } from '@/lib/ai/plans';
+import { getAiQuota } from '@/lib/ai/quota';
 import { recordAiUsage } from '@/lib/ai/usage';
 import { ANALYSIS_RANGES, type AnalysisRangeKey, getBusinessAnalysis, rangeFromDays } from '@/lib/services/analytics';
 import type { TenantContext } from '@/lib/tenant-context';
@@ -10,13 +12,12 @@ import { buildFacts, factsToPrompt } from './facts';
 import { ANALYST_PROMPT_VERSION, analystSystemPrompt, analystUserPrompt, correctionPrompt } from './prompt';
 import { analystReportSchema, type AnalystReport, type ReportVerification, verifyReport } from './report';
 
+/** Freno anti-abuso adicional al cupo mensual del plan. */
 export const ANALYST_DAILY_LIMIT = 10;
+/** Con menos cuentas cerradas que esto no se llama al modelo: no hay nada que interpretar. */
+export const ANALYST_MIN_ORDERS = 15;
 /** Tiempo tras el cual no se intenta una segunda pasada de corrección (la función tiene 60 s). */
 const RETRY_BUDGET_MS = 25_000;
-
-export function analystModelId(): string {
-  return process.env.ANALYST_MODEL || 'claude-sonnet-5';
-}
 
 /**
  * Esfuerzo de razonamiento. Medido con datos reales: "medium" tarda ~33 s y cuesta
@@ -34,14 +35,14 @@ export function isAnalystConfigured(): boolean {
 
 export class AnalystError extends Error {
   constructor(
-    public readonly code: 'not_configured' | 'rate_limited' | 'no_data' | 'model_failed',
+    public readonly code: 'not_configured' | 'rate_limited' | 'quota_exceeded' | 'no_data' | 'model_failed',
     message: string,
   ) {
     super(message);
   }
 }
 
-export type GeneratedReport = { id: string; cached: boolean };
+export type GeneratedReport = { id: string; cached: boolean; model?: string; routeReason?: string };
 
 /**
  * Genera (o reutiliza) el informe del Analista para un rango:
@@ -56,16 +57,27 @@ export async function generateAnalystReport(ctx: TenantContext, rangeKey: Analys
 
   const range = rangeFromDays(ANALYSIS_RANGES[rangeKey].days);
   const analysis = await getBusinessAnalysis(ctx, range);
-  if (analysis.snapshot.kpis.orders === 0) {
-    throw new AnalystError('no_data', 'No hay ventas cerradas en este periodo: no hay nada que analizar todavía.');
+  if (analysis.snapshot.kpis.orders < ANALYST_MIN_ORDERS) {
+    throw new AnalystError(
+      'no_data',
+      `Hay ${analysis.snapshot.kpis.orders} cuenta(s) cerrada(s) en este periodo; el Analista necesita al menos ${ANALYST_MIN_ORDERS} para sacar conclusiones. Mientras tanto, revisa el tablero y las alertas (no consumen informes).`,
+    );
   }
+  const quota = await getAiQuota(ctx);
 
   const { currency, locale, timezone, name } = ctx.tenant;
   const facts = buildFacts(analysis, {
     money: (n) => formatCurrency(n, currency, locale),
     date: (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: timezone, dateStyle: 'short' }).format(new Date(iso)),
   });
-  const model = analystModelId();
+  const anomalies = analysis.anomalies;
+  const route = pickAnalystModel(quota.plan.tier, {
+    facts: facts.length,
+    anomalies: anomalies.length,
+    critical: anomalies.filter((a) => a.severity === 'critical').length,
+    days: analysis.snapshot.period.days,
+  });
+  const model = route.model;
   const factsHash = createHash('sha256')
     .update(JSON.stringify({ v: ANALYST_PROMPT_VERSION, model, facts }))
     .digest('hex');
@@ -80,6 +92,11 @@ export async function generateAnalystReport(ctx: TenantContext, rangeKey: Analys
     .limit(1)
     .maybeSingle();
   if (cached) return { id: cached.id, cached: true };
+
+  // Cupo del plan y tope de gasto: se validan antes de gastar un solo token.
+  if (!quota.canGenerateReport) {
+    throw new AnalystError('quota_exceeded', `${quota.blockedReason} Tus informes anteriores siguen disponibles en el historial.`);
+  }
 
   const since = new Date(Date.now() - 86_400_000).toISOString();
   const { count } = await ctx.supabase
@@ -102,12 +119,12 @@ export async function generateAnalystReport(ctx: TenantContext, rangeKey: Analys
   let failure: string | null = null;
 
   // Cada llamada al modelo queda en ai_usage con su costo, incluso si falla.
-  const track = async (usage: Partial<LanguageModelUsage> | undefined, callStarted: number, error?: string) => {
+  const track = async (callModel: string, usage: Partial<LanguageModelUsage> | undefined, callStarted: number, error?: string) => {
     inputTokens += usage?.inputTokens ?? 0;
     outputTokens += usage?.outputTokens ?? 0;
     const cost = await recordAiUsage(ctx, {
       feature: 'analyst_report',
-      model,
+      model: callModel,
       usage,
       durationMs: Date.now() - callStarted,
       status: error ? 'error' : 'ok',
@@ -120,23 +137,25 @@ export async function generateAnalystReport(ctx: TenantContext, rangeKey: Analys
   try {
     for (let attempt = 0; attempt < 2; attempt++) {
       const callStarted = Date.now();
+      // La corrección (2.º intento) es una tarea simple: se hace con el modelo económico.
+      const callModel = attempt === 0 ? model : MODELS.economy;
       let result;
       try {
         result = await generateText({
-          model: anthropic(model),
+          model: anthropic(callModel),
           system: analystSystemPrompt({ name, currency }),
           messages,
           output: Output.object({ schema: analystReportSchema, name: 'informe_analista' }),
           maxOutputTokens: 10_000,
           temperature: 0.2,
-          providerOptions: { anthropic: { effort: analystEffort() } },
+          ...(callModel === MODELS.economy ? {} : { providerOptions: { anthropic: { effort: analystEffort() } } }),
         });
       } catch (error) {
         const usage = NoObjectGeneratedError.isInstance(error) ? error.usage : undefined;
-        await track(usage, callStarted, error instanceof Error ? error.message : String(error));
+        await track(callModel, usage, callStarted, error instanceof Error ? error.message : String(error));
         throw error;
       }
-      await track(result.totalUsage, callStarted);
+      await track(callModel, result.totalUsage, callStarted);
       report = result.output;
       verification = verifyReport(report, facts);
       if (verification.ok || Date.now() - started > RETRY_BUDGET_MS) break;
@@ -176,5 +195,5 @@ export async function generateAnalystReport(ctx: TenantContext, rangeKey: Analys
   if (saveError) throw saveError;
   if (!report) throw new AnalystError('model_failed', 'El analista no pudo completar el informe. Intenta de nuevo en unos minutos.');
 
-  return { id: saved.id, cached: false };
+  return { id: saved.id, cached: false, model, routeReason: route.reason };
 }

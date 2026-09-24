@@ -357,6 +357,16 @@ type AiUsageRow = {
   created_at: string;
 };
 
+type TenantAiPlanRow = {
+  tenant_id: string;
+  plan: 'sin_ia' | 'prueba' | 'basico' | 'pro' | 'premium';
+  reports_per_month: number | null;
+  monthly_budget_usd: number | null;
+  model_tier: 'economy' | 'balanced' | 'premium' | null;
+  notes: string | null;
+  updated_at: string;
+};
+
 type ProductAvailabilityRow = {
   product_id: string;
   tenant_id: string;
@@ -410,6 +420,7 @@ export type Database = {
       einvoice_documents: Table<EInvoiceDocumentRow, 'order_id' | 'doc_type' | 'provider' | 'environment' | 'payload'>;
       ai_reports: Table<AiReportRow, 'period_from' | 'period_to' | 'model' | 'facts_hash' | 'facts', never>;
       ai_usage: Table<AiUsageRow, 'feature' | 'model', never>;
+      tenant_ai_plans: Table<TenantAiPlanRow, 'tenant_id', never>;
     };
     Views: {
       product_availability: { Row: ProductAvailabilityRow; Relationships: [] };

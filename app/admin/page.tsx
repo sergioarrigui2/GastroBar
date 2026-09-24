@@ -1,5 +1,7 @@
 import Link from 'next/link';
+import { DailyBriefingCard } from '@/components/admin/ai/DailyBriefingCard';
 import { MetricsDashboard } from '@/components/admin/MetricsDashboard';
+import { getDailyBriefing } from '@/lib/services/ai-team';
 import { getInventoryOverview } from '@/lib/services/inventory';
 import { getShiftMetrics, shiftStart } from '@/lib/services/metrics';
 import { getSetupStatus } from '@/lib/services/setup';
@@ -24,10 +26,15 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
       ? shiftStart(ctx.tenant.timezone)
       : new Date(Date.now() - (range === '7d' ? 7 : 30) * 86_400_000);
 
-  const [metrics, inventory, setup] = await Promise.all([
+  const [metrics, inventory, setup, briefing] = await Promise.all([
     getShiftMetrics(ctx, { from: from.toISOString() }),
     getInventoryOverview(ctx),
     getSetupStatus(ctx),
+    // El resumen es un extra: si falla (p. ej. faltan migraciones), la portada sigue funcionando.
+    getDailyBriefing(ctx).catch((error: unknown) => {
+      console.error('[briefing]', error);
+      return null;
+    }),
   ]);
 
   return (
@@ -44,6 +51,7 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
           <span className="ml-auto font-semibold text-brand-600">Abrir guía de inicio →</span>
         </Link>
       )}
+      {briefing && (setup.complete || briefing.items.length > 0) && <DailyBriefingCard briefing={briefing} name={ctx.profile.full_name} />}
       <MetricsDashboard
         tenantId={ctx.tenant.id}
         currency={ctx.tenant.currency}
