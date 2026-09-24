@@ -2,10 +2,12 @@ import { ArrowLeft, CheckCircle2, Cog, Gem, MapPin, Wallet } from 'lucide-react'
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Card } from '@/components/ui/primitives';
+import { AGENT_STATUS_LABEL, type AgentStatus } from '@/lib/ai/access';
 import type { AgentProfile } from '@/lib/ai/agents';
 import type { AgentStat } from '@/lib/services/agent-stats';
 import { cn } from '@/lib/utils';
 import { AgentAvatar } from './AgentAvatar';
+import { AgentLocked } from './AgentLocked';
 
 function Section({ icon, title, items }: { icon: ReactNode; title: string; items: string[] }) {
   return (
@@ -26,7 +28,21 @@ function Section({ icon, title, items }: { icon: ReactNode; title: string; items
 }
 
 /** Presentación de un agente: quién es, qué hace, cómo trabaja, qué gana el negocio y su trabajo real del mes. */
-export function AgentProfileView({ agent, stats, children }: { agent: AgentProfile; stats: AgentStat[]; children?: ReactNode }) {
+export function AgentProfileView({
+  agent,
+  stats,
+  status,
+  trialLabel,
+  children,
+}: {
+  agent: AgentProfile;
+  stats: AgentStat[];
+  status: AgentStatus;
+  /** Fecha legible de fin de prueba, si aplica. */
+  trialLabel?: string | null;
+  children?: ReactNode;
+}) {
+  const hired = status !== 'off';
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <Link href="/admin/ai" className="inline-flex items-center gap-1 text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100">
@@ -46,6 +62,9 @@ export function AgentProfileView({ agent, stats, children }: { agent: AgentProfi
         </div>
       </header>
 
+      {!hired && <AgentLocked agent={agent.id} hint="Todavía no estoy en tu equipo. Así es como trabajaría para tu negocio:" />}
+
+      {hired && stats.length > 0 && (
       <section aria-label="Mi trabajo este mes">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">Mi trabajo este mes</h2>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -58,8 +77,9 @@ export function AgentProfileView({ agent, stats, children }: { agent: AgentProfi
           ))}
         </div>
       </section>
+      )}
 
-      {children}
+      {hired && children}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Section icon={<Cog className="size-5 text-zinc-400" aria-hidden />} title="Qué hago" items={agent.does} />
@@ -70,19 +90,21 @@ export function AgentProfileView({ agent, stats, children }: { agent: AgentProfi
       <div className="grid gap-4 sm:grid-cols-2">
         <Card className="space-y-2">
           <h2 className="flex items-center gap-2 font-semibold">
-            <Wallet className="size-5 text-zinc-400" aria-hidden /> Cuánto cuesto
+            <Wallet className="size-5 text-zinc-400" aria-hidden /> Mi contrato
           </h2>
           <p
             className={cn(
               'inline-block rounded-full px-3 py-1 text-sm font-bold',
-              agent.cost.usesAi === 'yes'
-                ? 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200'
-                : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200',
+              status === 'contracted' && 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200',
+              status === 'trial' && 'bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-200',
+              status === 'off' && 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300',
             )}
           >
-            {agent.cost.label}
+            {status === 'trial' && trialLabel ? `En prueba hasta el ${trialLabel}` : AGENT_STATUS_LABEL[status]}
           </p>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">{agent.cost.detail}</p>
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            {hired ? agent.cost.detail : 'Pídele a tu asesor de GastroBar que me sume a tu equipo.'}
+          </p>
         </Card>
         <Card className="space-y-2">
           <h2 className="flex items-center gap-2 font-semibold">

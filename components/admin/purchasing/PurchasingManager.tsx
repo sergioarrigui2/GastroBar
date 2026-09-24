@@ -311,7 +311,7 @@ function SuggestionView({
             </p>
             <p>{s.ai_review.summary}</p>
             <p className="mt-1 text-xs text-zinc-500">
-              {s.ai_review.model} · USD {Number(s.ai_review.cost_usd ?? 0).toFixed(4)} · las cantidades no se cambiaron solas
+              Sugerencias: las cantidades no se cambiaron solas
             </p>
           </div>
         ) : (
@@ -319,7 +319,7 @@ function SuggestionView({
           s.lines.length > 0 &&
           aiAvailable && (
             <Button variant="secondary" disabled={pending} onClick={() => run(() => reviewSuggestionWithAiAction(s.id), 'Revisión lista')}>
-              <Sparkles className="size-4" /> Revisar con IA (opcional · Haiku, menos de USD 0,01)
+              <Sparkles className="size-4" /> Pedir una segunda mirada con IA
             </Button>
           )
         )}

@@ -131,17 +131,6 @@ export function ReportView({ report }: { report: StoredReport }) {
             <AlertTriangle className="size-3.5" aria-hidden /> Algunas cifras no se pudieron verificar: contrástalas con el tablero
           </span>
         )}
-        <span>Modelo {report.model}</span>
-        {report.input_tokens !== null && (
-          <span>
-            {report.input_tokens.toLocaleString()} + {report.output_tokens?.toLocaleString()} tokens
-          </span>
-        )}
-        {report.duration_ms !== null && <span>{Math.round(report.duration_ms / 1000)} s</span>}
-        {report.cost_usd !== null && <span>Costo USD {Number(report.cost_usd).toFixed(3)}</span>}
-        <a href="/admin/ai-usage" className="font-medium text-brand-600 hover:underline">
-          Ver consumo de IA
-        </a>
       </footer>
     </article>
   );

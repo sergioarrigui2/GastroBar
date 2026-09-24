@@ -65,6 +65,7 @@ export function AnalyticsDashboard({
   range,
   ranges,
   analyst,
+  locked = {},
 }: {
   analysis: BusinessAnalysis;
   locale: string;
@@ -72,6 +73,8 @@ export function AnalyticsDashboard({
   ranges: Array<{ key: string; label: string }>;
   /** Panel del Agente Analista (se renderiza entre el encabezado y los indicadores). */
   analyst?: ReactNode;
+  /** Secciones de agentes no contratados: se reemplazan por su invitación. */
+  locked?: { alerts?: ReactNode; menu?: ReactNode };
 }) {
   const { snapshot: s, changes: c, ratios, menu } = analysis;
   const money = (n: number) => formatCurrency(n, s.period.currency, locale);
@@ -160,6 +163,7 @@ export function AnalyticsDashboard({
         />
       </section>
 
+      {locked.alerts ?? (
       <Card>
         <div className="mb-3 flex items-center gap-2">
           <h2 className="mr-auto font-semibold">Alertas</h2>
@@ -185,6 +189,7 @@ export function AnalyticsDashboard({
           </ul>
         )}
       </Card>
+      )}
 
       <section className="grid gap-4 lg:grid-cols-5">
         <Card className="lg:col-span-3">
@@ -274,6 +279,7 @@ export function AnalyticsDashboard({
         )}
       </Card>
 
+      {locked.menu ?? (
       <Card>
         <h2 className="mb-1 font-semibold">Ingeniería de menú</h2>
         <p className="mb-4 text-sm text-zinc-500">
@@ -344,6 +350,7 @@ export function AnalyticsDashboard({
           </>
         )}
       </Card>
+      )}
 
       <section className="grid gap-4 lg:grid-cols-2">
         <Card>

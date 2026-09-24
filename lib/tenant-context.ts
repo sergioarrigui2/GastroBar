@@ -28,7 +28,7 @@ export class TenantContextError extends Error {
   constructor(
     message: string,
     readonly status: 401 | 403,
-    readonly code: 'unauthenticated' | 'no_profile' | 'inactive' | 'forbidden',
+    readonly code: 'unauthenticated' | 'no_profile' | 'inactive' | 'suspended' | 'forbidden',
   ) {
     super(message);
     this.name = 'TenantContextError';
@@ -55,8 +55,10 @@ async function resolveTenantContext(supabase: TypedSupabaseClient, accessToken?:
     .from('tenants')
     .select('*')
     .eq('id', profile.tenant_id)
-    .single();
+    .maybeSingle();
   if (tenantError) throw tenantError;
+  // RLS oculta el gastrobar cuando la plataforma lo suspende (migración 011).
+  if (!tenant) throw new TenantContextError('Tu gastrobar está suspendido. Comunícate con tu asesor.', 403, 'suspended');
 
   return { supabase, userId, role: profile.role, profile, tenant };
 }
@@ -91,6 +93,12 @@ export function assertRole(ctx: TenantContext, allowed: readonly AppRole[]): voi
   }
 }
 
+const LOGIN_BY_ERROR: Partial<Record<TenantContextError['code'], string>> = {
+  no_profile: '/login?error=no_account',
+  inactive: '/login?error=inactive',
+  suspended: '/login?error=suspended',
+};
+
 export const HOME_BY_ROLE: Record<AppRole, string> = {
   admin: '/admin',
   cashier: '/waiter',
@@ -100,14 +108,14 @@ export const HOME_BY_ROLE: Record<AppRole, string> = {
   ai_agent: '/login?error=ai_agent',
 };
 
-/** Para páginas: resuelve el contexto o redirige (login, onboarding o home del rol). */
+/** Para páginas: resuelve el contexto o redirige (login con el motivo, o home del rol). */
 export async function requirePageRole(allowed: readonly AppRole[]): Promise<TenantContext> {
   let ctx: TenantContext;
   try {
     ctx = await getTenantContext();
   } catch (error) {
     if (error instanceof TenantContextError) {
-      redirect(error.code === 'no_profile' ? '/onboarding' : '/login');
+      redirect(LOGIN_BY_ERROR[error.code] ?? '/login');
     }
     throw error;
   }

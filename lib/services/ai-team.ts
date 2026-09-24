@@ -1,4 +1,6 @@
 import 'server-only';
+import type { AgentAccess } from '@/lib/ai/access';
+import { getAgentAccess } from '@/lib/ai/entitlements';
 import { monthStart } from '@/lib/ai/plans';
 import { type AiQuota, getAiQuota } from '@/lib/ai/quota';
 import { isAnalystConfigured } from '@/lib/analyst/generate';
@@ -16,6 +18,7 @@ export type AiTeamOverview = {
   latestReport: ReportWithPeriod | null;
   reportsThisMonth: number;
   purchase: PurchaseStatus;
+  access: AgentAccess;
 };
 
 export type PurchaseStatus = {
@@ -70,20 +73,29 @@ export async function getAiTeamOverview(ctx: TenantContext): Promise<AiTeamOverv
   // Los primeros minutos del mes no hay rango válido: se usa al menos una hora.
   const from = now.getTime() - since.getTime() < 3_600_000 ? new Date(now.getTime() - 3_600_000) : since;
 
-  const [quota, monthAnalysis, reports, purchase] = await Promise.all([
+  const [quota, monthAnalysis, reports, purchase, access] = await Promise.all([
     getAiQuota(ctx),
     getBusinessAnalysis(ctx, { from: from.toISOString(), to: now.toISOString() }),
     listReports(ctx, 1),
     getPurchaseStatus(ctx).catch(() => NO_PURCHASE),
+    getAgentAccess(ctx),
   ]);
+
+  // La plata detectada es del Vigía; el sobrecosto del menú, del Ingeniero.
+  const detected = detectedValue(monthAnalysis);
+  if (!access.ingeniero.active) {
+    detected.items = detected.items.filter((i) => i.key !== 'food_cost');
+    detected.total = detected.items.reduce((s, i) => s + i.amount, 0);
+  }
 
   return {
     configured: isAnalystConfigured(),
     quota,
-    detected: { ...detectedValue(monthAnalysis), since: since.toISOString() },
+    detected: { ...detected, since: since.toISOString() },
     latestReport: reports[0] ?? null,
     reportsThisMonth: quota.reportsUsed,
     purchase,
+    access,
   };
 }
 
@@ -91,18 +103,20 @@ export type DailyBriefing = { greeting: string; items: BriefingItem[]; reportId:
 
 /** Resumen del día para la portada del admin: último informe reciente + alertas de 7 días. Sin LLM. */
 export async function getDailyBriefing(ctx: TenantContext): Promise<DailyBriefing> {
-  const [analysis, reports, purchase] = await Promise.all([
+  const [analysis, reports, purchase, access] = await Promise.all([
     getBusinessAnalysis(ctx, rangeFromDays(7)),
     listReports(ctx, 1),
     getPurchaseStatus(ctx).catch(() => NO_PURCHASE),
+    getAgentAccess(ctx),
   ]);
-  const latest = reports[0] ?? null;
-  const pending = purchase.latest?.status === 'draft' ? purchase.latest : null;
+  // Cada agente habla sólo si está contratado.
+  const latest = access.analista.active ? (reports[0] ?? null) : null;
+  const pending = access.comprador.active && purchase.latest?.status === 'draft' ? purchase.latest : null;
   return {
     greeting: greeting(ctx.tenant.timezone),
     items: buildBriefing({
       report: latest,
-      anomalies: analysis.anomalies,
+      anomalies: access.vigia.active ? analysis.anomalies : [],
       purchase: pending
         ? {
             created_at: pending.created_at,

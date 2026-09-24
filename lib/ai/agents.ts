@@ -45,7 +45,7 @@ export const AGENTS: Record<AgentId, AgentProfile> = {
       'Un equipo que sabe que los números se revisan cuida más la caja y el inventario.',
       'Menos tiempo revisando reportes: te llego con lo importante.',
     ],
-    cost: { usesAi: 'no', label: 'Sin costo', detail: 'Trabajo con reglas y cálculos exactos; no uso inteligencia artificial.' },
+    cost: { usesAi: 'no', label: 'Incluido', detail: 'Trabajo todo el día, sin límite de uso.' },
     where: [
       { label: 'Resumen del día', href: '/admin' },
       { label: 'Alertas en Análisis', href: '/admin/analytics' },
@@ -76,7 +76,7 @@ export const AGENTS: Record<AgentId, AgentProfile> = {
       'Una carta más corta y rentable, con menos inventario inmovilizado.',
       'Saber qué recomendar en la mesa.',
     ],
-    cost: { usesAi: 'no', label: 'Sin costo', detail: 'Es cálculo exacto con tus ventas y recetas; no uso inteligencia artificial.' },
+    cost: { usesAi: 'no', label: 'Incluido', detail: 'Reviso tu carta todos los días, sin límite de uso.' },
     where: [
       { label: 'Menú (insignia en cada producto)', href: '/admin/menu' },
       { label: 'Ingeniería de menú en Análisis', href: '/admin/analytics' },
@@ -96,18 +96,18 @@ export const AGENTS: Record<AgentId, AgentProfile> = {
     ],
     how: [
       'El sistema calcula las cifras; yo sólo las interpreto. Cada cifra que cito se verifica contra tus datos.',
-      'Uso Haiku para periodos simples y Sonnet para los complejos, para no gastar de más.',
-      'Si tus datos no cambiaron, te muestro el informe guardado sin volver a cobrar.',
+      'Uso el nivel de análisis que cada periodo necesita: más profundo cuando hay más señales.',
+      'Si tus datos no cambiaron, te muestro el informe guardado sin gastar cupo.',
     ],
     value: [
       'Criterio de consultor sin pagar un consultor.',
       'Decisiones con evidencia, no por intuición.',
-      'Menos de 5 centavos de dólar por informe.',
+      'Un análisis cuando lo necesites, sin esperar al contador de fin de mes.',
     ],
     cost: {
       usesAi: 'yes',
-      label: 'Usa IA',
-      detail: 'Cada informe cuenta del cupo de tu plan (≈ USD 0,02 a 0,04). Repetir sin datos nuevos es gratis.',
+      label: 'Incluido en tu plan',
+      detail: 'Tu plan incluye un número de informes al mes. Si tus datos no cambiaron, repetir un informe no gasta cupo.',
     },
     where: [
       { label: 'Informe en Análisis', href: '/admin/analytics' },
@@ -139,7 +139,7 @@ export const AGENTS: Record<AgentId, AgentProfile> = {
       'El pedido que tomaba una hora, listo en segundos.',
       'Comprar con datos, no a ojo.',
     ],
-    cost: { usesAi: 'optional', label: 'Sin costo', detail: 'El cálculo no usa IA. La revisión opcional con IA cuesta ≈ USD 0,002.' },
+    cost: { usesAi: 'optional', label: 'Incluido', detail: 'Calculo tus pedidos sin límite; la revisión con IA también está incluida.' },
     where: [
       { label: 'Comprador', href: '/admin/purchasing' },
       { label: 'Inventario', href: '/admin/inventory' },
@@ -167,7 +167,7 @@ export const AGENTS: Record<AgentId, AgentProfile> = {
       'Tus socios reciben la misma información, a tiempo.',
       'Un resumen que se puede reenviar tal cual.',
     ],
-    cost: { usesAi: 'no', label: 'Sin costo', detail: 'Reutilizo lo que ya calcularon los demás agentes; no uso IA.' },
+    cost: { usesAi: 'no', label: 'Incluido', detail: 'Envío tus resúmenes sin costo adicional.' },
     where: [{ label: 'Configurar el Mensajero', href: '/admin/ai/mensajero' }],
     tone: 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300',
   },

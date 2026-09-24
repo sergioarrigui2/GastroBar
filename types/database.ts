@@ -46,6 +46,9 @@ type TenantRow = {
   einvoice_provider: EInvoiceProviderId | 'none';
   einvoice_environment: 'test' | 'production';
   einvoice_default_doc: 'pos' | 'invoice';
+  status: 'active' | 'suspended';
+  status_reason: string | null;
+  platform_notes: string | null;
 };
 
 type ProfileRow = {
@@ -439,6 +442,16 @@ type MessengerDeliveryRow = {
   created_at: string;
 };
 
+type TenantAgentRow = {
+  tenant_id: string;
+  agent: 'vigia' | 'ingeniero' | 'analista' | 'comprador' | 'mensajero';
+  enabled: boolean;
+  trial_until: string | null;
+  updated_at: string;
+};
+
+type PlatformAdminRow = { user_id: string; created_at: string };
+
 type ProductAvailabilityRow = {
   product_id: string;
   tenant_id: string;
@@ -494,6 +507,8 @@ export type Database = {
       ai_usage: Table<AiUsageRow, 'feature' | 'model', never>;
       tenant_ai_plans: Table<TenantAiPlanRow, 'tenant_id', never>;
       suppliers: Table<SupplierRow, 'name'>;
+      tenant_agents: Table<TenantAgentRow, 'tenant_id' | 'agent'>;
+      platform_admins: Table<PlatformAdminRow, 'user_id', never>;
       messenger_settings: Table<MessengerSettingsRow, 'tenant_id'>;
       messenger_deliveries: Table<MessengerDeliveryRow, 'subject' | 'status', never>;
       agent_schedules: Table<AgentScheduleRow, 'agent'>;

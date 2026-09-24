@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { AgentProfileView } from '@/components/admin/ai/AgentProfileView';
 import { MessengerConfig } from '@/components/admin/ai/MessengerConfig';
 import { AGENTS, isAgentId } from '@/lib/ai/agents';
+import { getAgentAccess } from '@/lib/ai/entitlements';
 import { emailFrom, isEmailConfigured } from '@/lib/messenger/resend';
 import { getAgentStats } from '@/lib/services/agent-stats';
 import { buildTenantDigest, getMessengerOverview } from '@/lib/services/messenger';
@@ -17,14 +18,17 @@ export default async function AgentPage({ params }: { params: Promise<{ agent: s
   const { agent } = await params;
   if (!isAgentId(agent)) notFound();
 
+  const access = (await getAgentAccess(ctx))[agent];
   // Las cifras son un extra: si fallan (p. ej. faltan migraciones), la presentación se ve igual.
-  const stats = await getAgentStats(ctx, agent).catch((error: unknown) => {
-    console.error('[agent-stats]', error);
-    return [];
-  });
+  const stats = access.active
+    ? await getAgentStats(ctx, agent).catch((error: unknown) => {
+        console.error('[agent-stats]', error);
+        return [];
+      })
+    : [];
 
   let messenger = null;
-  if (agent === 'mensajero') {
+  if (agent === 'mensajero' && access.active) {
     const [overview, preview] = await Promise.all([
       getMessengerOverview(ctx),
       buildTenantDigest(ctx.supabase, ctx.tenant, false).catch((error: unknown) => {
@@ -45,7 +49,16 @@ export default async function AgentPage({ params }: { params: Promise<{ agent: s
   }
 
   return (
-    <AgentProfileView agent={AGENTS[agent]} stats={stats}>
+    <AgentProfileView
+      agent={AGENTS[agent]}
+      stats={stats}
+      status={access.status}
+      trialLabel={
+        access.trialUntil
+          ? new Intl.DateTimeFormat(ctx.tenant.locale, { timeZone: ctx.tenant.timezone, day: 'numeric', month: 'long' }).format(new Date(access.trialUntil))
+          : null
+      }
+    >
       {messenger}
     </AgentProfileView>
   );

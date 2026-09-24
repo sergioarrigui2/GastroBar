@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart3, BookOpen, ChefHat, Coins, FileCheck2, LayoutGrid, LifeBuoy, LineChart, Martini, Package, QrCode, Settings, ShoppingCart, Smartphone, Sparkles, Users, Wallet } from 'lucide-react';
+import { BarChart3, BookOpen, ChefHat, FileCheck2, LayoutGrid, LifeBuoy, LineChart, Martini, Package, QrCode, Settings, ShoppingCart, Smartphone, Sparkles, Users, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -9,7 +9,6 @@ const LINKS = [
   { href: '/admin', label: 'Métricas', icon: BarChart3 },
   { href: '/admin/ai', label: 'Equipo IA', icon: Sparkles },
   { href: '/admin/analytics', label: 'Análisis', icon: LineChart },
-  { href: '/admin/ai-usage', label: 'Consumo IA', icon: Coins },
   { href: '/admin/menu', label: 'Menú', icon: BookOpen },
   { href: '/admin/inventory', label: 'Inventario', icon: Package },
   { href: '/admin/purchasing', label: 'Comprador', icon: ShoppingCart },

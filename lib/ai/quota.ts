@@ -1,4 +1,5 @@
 import 'server-only';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { TenantContext } from '@/lib/tenant-context';
 import { type AiPlan, monthStart, resolvePlan } from './plans';
 
@@ -29,7 +30,8 @@ export async function getAiQuota(ctx: TenantContext): Promise<AiQuota> {
       .eq('tenant_id', ctx.tenant.id)
       .eq('status', 'completed')
       .gte('created_at', since),
-    ctx.supabase.from('ai_usage').select('cost_usd').eq('tenant_id', ctx.tenant.id).gte('created_at', since),
+    // Los costos no son visibles para el gastrobar (RLS, 011): el servidor los lee con el rol de servicio.
+    createSupabaseAdminClient().from('ai_usage').select('cost_usd').eq('tenant_id', ctx.tenant.id).gte('created_at', since),
   ]);
   if (planRes.error) throw planRes.error;
   if (reportsRes.error) throw reportsRes.error;
@@ -42,9 +44,10 @@ export async function getAiQuota(ctx: TenantContext): Promise<AiQuota> {
   const budgetLeftUsd = Math.max(0, Math.round((plan.monthlyBudgetUsd - spentUsd) * 10_000) / 10_000);
 
   let blockedReason: string | null = null;
-  if (plan.reportsPerMonth === 0) blockedReason = `Tu plan (${plan.label}) no incluye informes del Analista.`;
-  else if (reportsLeft === 0) blockedReason = `Usaste los ${plan.reportsPerMonth} informes de tu plan ${plan.label} este mes.`;
-  else if (budgetLeftUsd <= 0) blockedReason = `Se alcanzó el tope de gasto de IA de tu plan ${plan.label} este mes.`;
+  if (plan.reportsPerMonth === 0) blockedReason = 'Tu plan no incluye informes del Analista.';
+  else if (reportsLeft === 0) blockedReason = `Ya usaste los ${plan.reportsPerMonth} informes incluidos este mes.`;
+  // Tope de uso justo: el cliente nunca ve montos, sólo que el cupo del mes se agotó.
+  else if (budgetLeftUsd <= 0) blockedReason = 'Ya usaste el análisis con IA incluido este mes.';
 
   return {
     plan,

@@ -27,6 +27,15 @@ export default async function LoginPage({
             contraseña; si aún no terminas de crear tu gastrobar, te llevaremos a hacerlo.
           </p>
         )}
+        {(error === 'suspended' || error === 'no_account' || error === 'inactive') && (
+          <p className="mb-4 rounded-xl bg-amber-100 p-3 text-sm text-amber-900 dark:bg-amber-500/15 dark:text-amber-200">
+            {error === 'suspended'
+              ? 'Tu gastrobar está suspendido. Comunícate con tu asesor de GastroBar para reactivarlo.'
+              : error === 'inactive'
+                ? 'Tu usuario está desactivado. Habla con el administrador de tu gastrobar.'
+                : 'Este usuario no está asociado a ningún gastrobar. Si eres cliente, pide a tu asesor que te dé acceso.'}
+          </p>
+        )}
         {error === 'ai_agent' && (
           <p className="mb-4 rounded-xl bg-amber-100 p-3 text-sm text-amber-900 dark:bg-amber-500/15 dark:text-amber-200">
             Los usuarios <b>ai_agent</b> sólo acceden por API (/api/v1/mcp o /api/v1/ai-tools).
@@ -40,9 +49,9 @@ export default async function LoginPage({
           </Link>
         </p>
         <p className="mt-6 text-center text-sm text-zinc-500">
-          ¿Nuevo gastrobar?{' '}
+          ¿Quieres GastroBar para tu negocio?{' '}
           <Link href="/onboarding" className="font-semibold text-brand-600 hover:underline">
-            Crear cuenta
+            Solicita una demo
           </Link>
         </p>
       </div>

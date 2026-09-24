@@ -40,7 +40,8 @@ supabase/
   migrations/           Cambios para bases ya creadas (002 catálogo · 003 caja, claves API, QR,
                         imágenes · 004 impuestos, cortesías, descuentos, anulaciones ·
                         005 facturación electrónica · 006 análisis · 007 informes y costos IA ·
-                        008 planes de IA · 009 Comprador · 010 Mensajero)
+                        008 planes de IA · 009 Comprador · 010 Mensajero ·
+                        011 plataforma)
   seed.sql              Menú, mesas, insumos y recetas demo
 tests/                  Motor de split-bill + integración SQL (PGlite)
 types/                  Tipos de base de datos y dominio
@@ -263,6 +264,27 @@ Si un agente falla (por ejemplo, faltan migraciones), el módulo se ve normal si
 - **Correo** con Resend a hasta 5 destinatarios, manual (máx. 5 al día) o programado (diario, semanal, quincenal o mensual) por el mismo cron de agentes; cada envío queda registrado (`messenger_deliveries`, migración 010).
 - **WhatsApp**: botones "Enviar a mi WhatsApp" y "Compartir por WhatsApp" con el mismo resumen en texto, sin costo.
 - La migración 010 permite que `get_business_snapshot` reciba un gastrobar explícito **sólo con el rol de servicio**, para el envío programado.
+
+## Consola de plataforma y modelo "POS + empleados IA"
+
+El registro abierto está **cerrado**: los gastrobares los crea el superusuario desde **`/platform`** (migración 011). `/onboarding` sólo invita a pedir una demo por WhatsApp (`NEXT_PUBLIC_SALES_WHATSAPP`).
+
+**Registrar tu usuario como superusuario** (SQL Editor, una vez; cambia el correo):
+```sql
+insert into public.platform_admins (user_id)
+select id from auth.users where email = 'tu@correo.com'
+on conflict do nothing;
+```
+
+| En `/platform` | Qué hace |
+|---|---|
+| Nuevo cliente | Crea el gastrobar + el usuario administrador del dueño (ya confirmado, con contraseña inicial que entregas tú), los agentes contratados, prueba gratis de 7/14/30 días y el plan del Analista |
+| Agentes por cliente | Cada agente: contratado, en prueba hasta una fecha o no contratado |
+| Plan del Analista | Informes al mes, tope de gasto (uso justo) y modelos; invisible para el cliente |
+| Suspender / reactivar | Un gastrobar suspendido no puede leer ni escribir nada (lo impone la base de datos) y sus usuarios ven "cuenta suspendida"; no se borra ningún dato |
+| Costos | Costo de IA del mes por cliente y detalle de cada llamada. **El cliente nunca ve costos**: la tabla `ai_usage` ya no es legible para los gastrobares |
+
+**Agentes contratados** (`tenant_agents`; sin fila = contratado, para compatibilidad): cada agente se respeta en pantallas, avisos de los módulos, resumen del día, Mensajero, acciones del servidor y el cron. Un agente no contratado aparece como invitación ("Conocer al Comprador", "Activarlo con mi asesor"), nunca con precios.
 
 ## Capa de herramientas para agentes de IA
 

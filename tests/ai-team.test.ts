@@ -95,3 +95,21 @@ test('resumen del día: prioriza el informe reciente, completa con alertas y no 
   assert.ok(old.every((i) => i.source === 'reglas'));
   assert.equal(greeting('America/Bogota', new Date('2026-09-24T13:00:00Z')), 'Buenos días');
 });
+
+test('agentes contratados: sin fila = contratado; prueba vencida = no contratado', async () => {
+  const { resolveAgentAccess } = await import('../lib/ai/access.ts');
+  const now = new Date('2026-09-24T12:00:00Z');
+  const a = resolveAgentAccess(
+    [
+      { agent: 'analista', enabled: false, trial_until: null },
+      { agent: 'comprador', enabled: true, trial_until: '2026-10-01T00:00:00Z' },
+      { agent: 'mensajero', enabled: true, trial_until: '2026-09-20T00:00:00Z' },
+    ],
+    now,
+  );
+  assert.equal(a.vigia.status, 'contracted');
+  assert.equal(a.analista.active, false);
+  assert.equal(a.comprador.status, 'trial');
+  assert.equal(a.comprador.active, true);
+  assert.equal(a.mensajero.status, 'off');
+});

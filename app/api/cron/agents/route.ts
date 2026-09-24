@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getAgentAccessFor } from '@/lib/ai/entitlements';
 import { nextRunAt } from '@/lib/purchasing/schedule';
 import { buildTenantDigest, deliver } from '@/lib/services/messenger';
 import { runPurchasePlan } from '@/lib/services/purchasing';
@@ -33,7 +34,7 @@ export async function GET(request: Request) {
   const tenantIds = [...new Set((due ?? []).map((s) => s.tenant_id))];
   const [{ data: tenants }, { data: settings }] = tenantIds.length
     ? await Promise.all([
-        admin.from('tenants').select('id, name, currency, locale, timezone').in('id', tenantIds),
+        admin.from('tenants').select('id, name, currency, locale, timezone, status').in('id', tenantIds),
         admin.from('messenger_settings').select('tenant_id, emails').in('tenant_id', tenantIds),
       ])
     : [{ data: [] }, { data: [] }];
@@ -46,6 +47,10 @@ export async function GET(request: Request) {
     let lastError: string | null = null;
     try {
       if (!tenant) throw new Error('Gastrobar no encontrado');
+      if (tenant.status !== 'active') throw new Error('Gastrobar suspendido');
+      const access = await getAgentAccessFor(admin, schedule.tenant_id);
+      const agent = schedule.agent === 'purchase' ? 'comprador' : 'mensajero';
+      if (!access[agent].active) throw new Error('Agente no contratado');
       if (schedule.agent === 'purchase') {
         await runPurchasePlan(admin, schedule.tenant_id, schedule.horizon_days, 'schedule');
       } else {

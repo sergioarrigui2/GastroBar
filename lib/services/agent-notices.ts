@@ -1,6 +1,7 @@
 import 'server-only';
 import type { NoticeItem } from '@/components/admin/ai/AgentAvatar';
 import type { MenuClass } from '@/lib/analytics/types';
+import { getAgentAccess } from '@/lib/ai/entitlements';
 import type { TenantContext } from '@/lib/tenant-context';
 import { getBusinessAnalysis, rangeFromDays } from './analytics';
 
@@ -26,6 +27,7 @@ const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
 
 export function getMenuInsights(ctx: TenantContext) {
   return safe(async () => {
+    if (!(await getAgentAccess(ctx)).ingeniero.active) return { insights: {} as Record<string, MenuInsight>, notice: [] as NoticeItem[] };
     const a = await analysis30(ctx);
     const insights: Record<string, MenuInsight> = {};
     for (const p of a.menu.products) {
@@ -47,8 +49,9 @@ export function getMenuInsights(ctx: TenantContext) {
 
 export function getInventoryNotices(ctx: TenantContext) {
   return safe(async () => {
+    const access = await getAgentAccess(ctx);
     const a = await analysis30(ctx);
-    const vigia: NoticeItem[] = a.anomalies
+    const vigia: NoticeItem[] = (access.vigia.active ? a.anomalies : [])
       .filter((x) => x.kind === 'shrinkage' || x.kind === 'waste' || x.kind === 'low_stock')
       .map((x) => ({ severity: x.severity, title: x.title, detail: x.detail }));
     const { data } = await ctx.supabase
@@ -61,7 +64,7 @@ export function getInventoryNotices(ctx: TenantContext) {
       .maybeSingle();
     const lines = (data?.lines as Array<{ name: string; urgent?: boolean; days_left?: number | null }> | undefined) ?? [];
     const urgent = lines.filter((l) => l.urgent);
-    const comprador: NoticeItem[] = data
+    const comprador: NoticeItem[] = data && access.comprador.active
       ? [
           {
             severity: urgent.length ? 'critical' : 'info',
@@ -80,6 +83,7 @@ export function getInventoryNotices(ctx: TenantContext) {
 export function getCashNotices(ctx: TenantContext) {
   if (ctx.role !== 'admin') return Promise.resolve([] as NoticeItem[]);
   return safe(async () => {
+    if (!(await getAgentAccess(ctx)).vigia.active) return [] as NoticeItem[];
     const a = await analysis30(ctx);
     const diffs = a.snapshot.cash.differences.map((d) => Number(d.difference));
     const short = diffs.filter((d) => d < 0);
@@ -99,6 +103,7 @@ export function getCashNotices(ctx: TenantContext) {
 
 export function getStaffNotices(ctx: TenantContext) {
   return safe(async () => {
+    if (!(await getAgentAccess(ctx)).vigia.active) return [] as NoticeItem[];
     const a = await analysis30(ctx);
     return a.anomalies
       .filter((x) => x.kind === 'staff_discounts' || x.kind === 'staff_voids' || x.kind === 'cash_difference')

@@ -1,4 +1,6 @@
+import { AgentLocked } from '@/components/admin/ai/AgentLocked';
 import { AnalystPanel } from '@/components/admin/analytics/AnalystPanel';
+import { getAgentAccess } from '@/lib/ai/entitlements';
 import { AnalyticsDashboard } from '@/components/admin/analytics/AnalyticsDashboard';
 import { getAiQuota } from '@/lib/ai/quota';
 import { isAnalystConfigured } from '@/lib/analyst/generate';
@@ -15,10 +17,11 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const { range: rawRange } = await searchParams;
   const range: AnalysisRangeKey = rawRange && rawRange in ANALYSIS_RANGES ? (rawRange as AnalysisRangeKey) : '30d';
 
-  const [analysis, report, quota] = await Promise.all([
+  const [analysis, report, quota, access] = await Promise.all([
     getBusinessAnalysis(ctx, rangeFromDays(ANALYSIS_RANGES[range].days)),
     getLatestReport(ctx, range),
     getAiQuota(ctx),
+    getAgentAccess(ctx),
   ]);
 
   return (
@@ -27,7 +30,12 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       locale={ctx.tenant.locale}
       range={range}
       ranges={Object.entries(ANALYSIS_RANGES).map(([key, v]) => ({ key, label: v.label }))}
+      locked={{
+        alerts: access.vigia.active ? undefined : <AgentLocked agent="vigia" hint="El Vigía te mostraría aquí faltantes de caja e inventario, descuentos fuera de lo normal y demoras." />,
+        menu: access.ingeniero.active ? undefined : <AgentLocked agent="ingeniero" hint="El Ingeniero de menú clasificaría aquí cada producto según lo que vende y lo que deja." />,
+      }}
       analyst={
+        access.analista.active ? (
         <AnalystPanel
           range={range}
           rangeLabel={ANALYSIS_RANGES[range].label}
@@ -40,6 +48,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
             blockedReason: quota.blockedReason,
           }}
         />
+        ) : (
+          <AgentLocked agent="analista" hint="El Analista leería estas cifras por ti y te diría qué hacer esta semana, en orden de importancia." />
+        )
       }
     />
   );

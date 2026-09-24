@@ -47,8 +47,13 @@ before(async () => {
   await db.exec(readFileSync(new URL('../supabase/schema.sql', import.meta.url), 'utf8'));
   await db.exec(`insert into auth.users values ('${ADMIN_A}'), ('${ADMIN_B}'), ('${WAITER_A}'), ('${BAR_A}')`);
 
-  ids.tenantA = (await one<{ id: string }>(ADMIN_A, `select public.create_tenant('Bar A', 'bar-a', 'Ana') as id`)).id;
-  await one(ADMIN_B, `select public.create_tenant('Bar B', 'bar-b', 'Beto') as id`);
+  // El registro está cerrado para usuarios (011): los gastrobares los crea la plataforma.
+  const createAs = async (uid: string, name: string, slug: string, owner: string) => {
+    await db.exec(`reset role; select set_config('request.jwt.claim.sub', '${uid}', false);`);
+    return (await db.query<{ id: string }>(`select public.create_tenant($1, $2, $3) as id`, [name, slug, owner])).rows[0]!.id;
+  };
+  ids.tenantA = await createAs(ADMIN_A, 'Bar A', 'bar-a', 'Ana');
+  ids.tenantB = await createAs(ADMIN_B, 'Bar B', 'bar-b', 'Beto');
   await db.exec(`insert into public.profiles (id, tenant_id, role, full_name) values
     ('${WAITER_A}', '${ids.tenantA}', 'waiter', 'Walter'), ('${BAR_A}', '${ids.tenantA}', 'bar', 'Kevin')`);
 
@@ -501,20 +506,23 @@ describe('informes del analista', () => {
 });
 
 describe('registro de costos de IA', () => {
-  test('admin registra y ve su consumo; meseros y otros tenants no; no se edita ni borra', async () => {
+  test('el servidor registra el consumo, pero el gastrobar no ve costos ni puede editarlos', async () => {
     const insert = (uid: string) =>
-      as(uid, `insert into ai_usage (feature, model, input_tokens, output_tokens, cost_usd) values ('analyst_report', 'claude-sonnet-5', 4695, 2704, 0.03643) returning id`);
-    const [row] = await insert(ADMIN_A);
+      as<{ id: string }>(uid, `insert into ai_usage (feature, model, input_tokens, output_tokens, cost_usd) values ('analyst_report', 'claude-sonnet-5', 4695, 2704, 0.03643) returning id`);
+    // Sin política de lectura (011), el INSERT ... RETURNING no devuelve la fila: se inserta sin returning.
+    await as(ADMIN_A, `insert into ai_usage (feature, model, input_tokens, output_tokens, cost_usd) values ('analyst_report', 'claude-sonnet-5', 4695, 2704, 0.03643)`);
     await assert.rejects(insert(WAITER_A), /row-level security/);
-    const [mine] = await as<{ c: number; total: string }>(ADMIN_A, `select count(*)::int as c, sum(cost_usd) as total from ai_usage`);
-    assert.equal(mine!.c, 1);
-    assert.equal(Number(mine!.total), 0.03643);
-    const [other] = await as<{ c: number }>(ADMIN_B, `select count(*)::int as c from ai_usage`);
-    assert.equal(other!.c, 0);
-    await as(ADMIN_A, `update ai_usage set cost_usd = 0 where id = $1`, [(row as { id: string }).id]);
-    await as(ADMIN_A, `delete from ai_usage where id = $1`, [(row as { id: string }).id]);
-    const [after] = await as<{ cost: string }>(ADMIN_A, `select cost_usd as cost from ai_usage where id = $1`, [(row as { id: string }).id]);
-    assert.equal(Number(after!.cost), 0.03643);
+    const [mine] = await as<{ c: number }>(ADMIN_A, `select count(*)::int as c from ai_usage`);
+    assert.equal(mine!.c, 0, 'el administrador del gastrobar no ve los costos');
+    await as(ADMIN_A, `update ai_usage set cost_usd = 0`);
+    await as(ADMIN_A, `delete from ai_usage`);
+    await db.exec('reset role');
+    const { rows } = await db.query<{ c: number; total: string }>(
+      `select count(*)::int as c, sum(cost_usd) as total from public.ai_usage where tenant_id = $1`,
+      [ids.tenantA],
+    );
+    assert.equal(rows[0]!.c, 1, 'la plataforma sí conserva el registro');
+    assert.equal(Number(rows[0]!.total), 0.03643);
   });
 });
 
@@ -609,5 +617,52 @@ describe('mensajero', () => {
     const [b] = await as<{ c: number }>(ADMIN_B, `select count(*)::int as c from messenger_deliveries`);
     assert.equal(b!.c, 0);
     await assert.rejects(as(WAITER_A, `insert into messenger_deliveries (recipients, subject, status) values ('{x@y.co}', 'x', 'sent')`), /row-level security/);
+  });
+});
+
+describe('plataforma', () => {
+  test('los usuarios ya no pueden crear gastrobares por su cuenta', async () => {
+    await db.exec(`insert into auth.users values ('55555555-5555-5555-5555-555555555555')`);
+    await assert.rejects(
+      as('55555555-5555-5555-5555-555555555555', `select public.create_tenant('Bar C', 'bar-c', 'Carla')`),
+      /permission denied/,
+    );
+  });
+
+  test('agentes contratados: los miembros los leen, nadie los cambia salvo la plataforma', async () => {
+    await db.exec(`insert into public.tenant_agents (tenant_id, agent, enabled) values ('${ids.tenantA}', 'analista', false)`);
+    const [row] = await as<{ enabled: boolean }>(WAITER_A, `select enabled from tenant_agents where agent = 'analista'`);
+    assert.equal(row!.enabled, false);
+    await as(ADMIN_A, `update tenant_agents set enabled = true where agent = 'analista'`);
+    const [after] = await as<{ enabled: boolean }>(ADMIN_A, `select enabled from tenant_agents where agent = 'analista'`);
+    assert.equal(after!.enabled, false);
+    await assert.rejects(as(ADMIN_A, `insert into tenant_agents (tenant_id, agent) values ($1, 'vigia')`, [ids.tenantA]), /row-level security/);
+    const [other] = await as<{ c: number }>(ADMIN_B, `select count(*)::int as c from tenant_agents`);
+    assert.equal(other!.c, 0);
+  });
+
+  test('un gastrobar suspendido no ve ni escribe nada, pero sus usuarios siguen viendo su perfil', async () => {
+    await db.exec(`update public.tenants set status = 'suspended' where id = '${ids.tenantB}'`);
+    try {
+      const [t] = await as<{ c: number }>(ADMIN_B, `select count(*)::int as c from tenants`);
+      assert.equal(t!.c, 0);
+      const [me] = await as<{ c: number }>(ADMIN_B, `select count(*)::int as c from profiles where id = auth.uid()`);
+      assert.equal(me!.c, 1);
+      await assert.rejects(as(ADMIN_B, `insert into zones (name) values ('Nueva')`), /row-level security|null value/);
+      // El otro gastrobar sigue funcionando normalmente.
+      const [a] = await as<{ c: number }>(ADMIN_A, `select count(*)::int as c from tenants`);
+      assert.equal(a!.c, 1);
+    } finally {
+      await db.exec(`update public.tenants set status = 'active' where id = '${ids.tenantB}'`);
+    }
+  });
+
+  test('sólo el propio superusuario ve su registro de plataforma', async () => {
+    await db.exec(`insert into public.platform_admins (user_id) values ('${ADMIN_A}')`);
+    const [mine] = await as<{ c: number }>(ADMIN_A, `select count(*)::int as c from platform_admins`);
+    assert.equal(mine!.c, 1);
+    const [other] = await as<{ c: number }>(ADMIN_B, `select count(*)::int as c from platform_admins`);
+    assert.equal(other!.c, 0);
+    await assert.rejects(as(ADMIN_B, `insert into platform_admins (user_id) values ($1)`, [ADMIN_B]), /row-level security/);
   });
 });

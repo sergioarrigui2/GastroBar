@@ -49,7 +49,6 @@ export default async function ReportsPage() {
                   <p className="font-semibold">{r.content.headline}</p>
                   <p className="text-xs text-zinc-500">
                     {r.created_label}
-                    {r.cost_usd !== null && ` · USD ${Number(r.cost_usd).toFixed(3)}`}
                   </p>
                 </div>
                 <ChevronRight className="size-5 shrink-0 text-zinc-400" aria-hidden />

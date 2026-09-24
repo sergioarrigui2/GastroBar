@@ -1,13 +1,15 @@
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { signOutAction } from '@/app/actions/auth';
 import { AdminNav } from '@/components/admin/AdminNav';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { isPlatformAdmin } from '@/lib/platform/auth';
 import { requirePageRole } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
-  const ctx = await requirePageRole(['admin']);
+  const [ctx, platform] = await Promise.all([requirePageRole(['admin']), isPlatformAdmin()]);
 
   return (
     <div className="min-h-dvh md:grid md:grid-cols-[15rem_1fr]">
@@ -20,6 +22,11 @@ export default async function AdminLayout({ children }: { children: ReactNode })
           <ThemeToggle />
         </div>
         <AdminNav />
+        {platform && (
+          <Link href="/platform" className="mx-4 mt-4 hidden rounded-xl border border-dashed border-brand-400/60 px-3 py-2 text-sm font-semibold text-brand-600 md:block">
+            Consola de plataforma →
+          </Link>
+        )}
         <form action={signOutAction} className="hidden px-4 pt-6 md:block">
           <button type="submit" className="text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100">
             Cerrar sesión
