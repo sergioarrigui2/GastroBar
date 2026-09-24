@@ -115,5 +115,5 @@ export async function onboardingAction(_prev: AuthFormState, formData: FormData)
     return { error: error.code === '23505' && !error.message.includes('already_member') ? 'Ese identificador ya está en uso' : toUserMessage(error) };
   }
 
-  redirect('/admin');
+  redirect('/admin/help');
 }

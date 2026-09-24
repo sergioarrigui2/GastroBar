@@ -63,6 +63,7 @@ types/                  Tipos de base de datos y dominio
    - **Inventario** (`/admin/inventory`): alta y edición de insumos; compras, mermas y ajustes.
    - **Salón y mesas** (`/admin/floor`): zonas y mesas, con creación en lote (T1…T8).
    - **Ajustes** (`/admin/settings`): nombre, moneda, zona horaria, tiempos del KDS y venta sin stock.
+   - **Ayuda** (`/admin/help`): guía de inicio que marca sola los pasos configurados (ajustes, salón, insumos, menú, personal) y una lista para probar un servicio completo. Las cuentas nuevas llegan aquí al terminar el registro.
 7. En **Admin → Personal** crea meseros, caja, cocina, barra y usuarios `ai_agent`.
 
 **Actualizar una base existente:** ejecuta en orden los archivos de `supabase/migrations/` que aún no hayas aplicado. Para instalaciones nuevas no hace falta: `schema.sql` ya los incluye.
