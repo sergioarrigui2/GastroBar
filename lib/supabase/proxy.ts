@@ -30,6 +30,17 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
+  // Enlaces de recuperación enviados desde el panel de Supabase llegan a la Site URL con ?code=.
+  const recoveryCode = pathname === '/' ? request.nextUrl.searchParams.get('code') : null;
+  if (recoveryCode) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/auth/callback';
+    url.search = '';
+    url.searchParams.set('code', recoveryCode);
+    url.searchParams.set('next', '/auth/reset');
+    return NextResponse.redirect(url);
+  }
+
   if (!isAuthenticated && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';

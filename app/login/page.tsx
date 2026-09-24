@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { LoginForm } from './LoginForm';
+import { RecoveryRedirect } from './RecoveryRedirect';
 
 export const metadata = { title: 'Ingresar' };
 
@@ -30,7 +31,13 @@ export default async function LoginPage({
             Los usuarios <b>ai_agent</b> sólo acceden por API (/api/v1/mcp o /api/v1/ai-tools).
           </p>
         )}
+        <RecoveryRedirect />
         <LoginForm next={next ?? '/'} />
+        <p className="mt-4 text-center text-sm">
+          <Link href="/auth/forgot" className="text-zinc-500 hover:underline">
+            ¿Olvidaste tu contraseña?
+          </Link>
+        </p>
         <p className="mt-6 text-center text-sm text-zinc-500">
           ¿Nuevo gastrobar?{' '}
           <Link href="/onboarding" className="font-semibold text-brand-600 hover:underline">

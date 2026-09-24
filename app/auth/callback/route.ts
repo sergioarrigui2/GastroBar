@@ -18,9 +18,10 @@ export async function GET(request: NextRequest) {
 
   if (code) {
     ok = !(await supabase.auth.exchangeCodeForSession(code)).error;
-  } else if (tokenHash && (type === 'signup' || type === 'email' || type === 'magiclink' || type === 'invite')) {
+  } else if (tokenHash && (type === 'signup' || type === 'email' || type === 'magiclink' || type === 'invite' || type === 'recovery')) {
     ok = !(await supabase.auth.verifyOtp({ token_hash: tokenHash, type })).error;
   }
 
-  return NextResponse.redirect(new URL(ok ? next : '/login?error=confirm', origin));
+  const fallback = next === '/auth/reset' ? '/auth/forgot?error=expired' : '/login?error=confirm';
+  return NextResponse.redirect(new URL(ok ? next : fallback, origin));
 }
