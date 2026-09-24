@@ -11,13 +11,15 @@ import { PGlite } from '@electric-sql/pglite';
 const SUPABASE_STUBS = `
   create role anon nologin;
   create role authenticated nologin;
+  create role service_role nologin bypassrls;
   create schema auth;
   create table auth.users (id uuid primary key);
   create function auth.uid() returns uuid language sql stable
     as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
   grant usage on schema auth to anon, authenticated;
-  grant usage on schema public to anon, authenticated;
-  alter default privileges in schema public grant all on tables to anon, authenticated;
+  grant usage on schema public to anon, authenticated, service_role;
+  grant usage on schema auth to service_role;
+  alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 `;
 
 const ADMIN_A = '11111111-1111-1111-1111-111111111111';
@@ -529,5 +531,53 @@ describe('planes de IA', () => {
     assert.equal(waiter!.c, 0);
     const [other] = await as<{ c: number }>(ADMIN_B, `select count(*)::int as c from tenant_ai_plans`);
     assert.equal(other!.c, 0);
+  });
+});
+
+describe('agente comprador', () => {
+  const asService = async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => {
+    await db.exec(`reset role; select set_config('request.jwt.claim.sub', '', false); set role service_role;`);
+    try {
+      return (await db.query<T>(sql, params)).rows;
+    } finally {
+      await db.exec('reset role');
+    }
+  };
+
+  test('entrega insumos con consumo diario real, proveedor y empaque', async () => {
+    const [sup] = await as<{ id: string }>(ADMIN_A, `insert into suppliers (name, phone, lead_time_days) values ('Licores del Valle', '573001112233', 2) returning id`);
+    await as(ADMIN_A, `update ingredients set supplier_id = $1, pack_size = 750, pack_label = 'botella 750 ml' where name = 'Ron'`, [sup!.id]);
+    const { r } = await one<{ r: any }>(ADMIN_A, `select public.get_purchase_inputs($1, 28) as r`, [ids.tenantA]);
+    const ron = r.ingredients.find((i: { name: string }) => i.name === 'Ron');
+    assert.equal(ron.supplier_name, 'Licores del Valle');
+    assert.equal(ron.lead_time_days, 2);
+    assert.equal(Number(ron.pack_size), 750);
+    assert.ok(Number(ron.sold) > 0, 'el ron vendido sale de los movimientos por receta');
+    const dailyTotal = Object.values(ron.daily as Record<string, number>).reduce((a, b) => a + Number(b), 0);
+    assert.equal(dailyTotal, Number(ron.sold));
+  });
+
+  test('sólo el admin de su gastrobar o el servicio programado', async () => {
+    await assert.rejects(as(WAITER_A, `select public.get_purchase_inputs($1, 28)`, [ids.tenantA]), /forbidden/);
+    await assert.rejects(as(ADMIN_B, `select public.get_purchase_inputs($1, 28)`, [ids.tenantA]), /forbidden/);
+    const [row] = await asService<{ r: any }>(`select public.get_purchase_inputs($1, 28) as r`, [ids.tenantA]);
+    assert.ok(row!.r.ingredients.length > 0);
+    const [other] = await as<{ c: number }>(ADMIN_B, `select count(*)::int as c from suppliers`);
+    assert.equal(other!.c, 0);
+  });
+
+  test('el cron guarda pedidos con el rol de servicio; sólo el admin del gastrobar los ve', async () => {
+    await asService(
+      `insert into purchase_suggestions (tenant_id, trigger, horizon_days, coverage_from, coverage_to, history_days, lines, total_estimated)
+       values ($1, 'schedule', 7, current_date, current_date + 7, 56, '[]', 0)`,
+      [ids.tenantA],
+    );
+    await as(ADMIN_A, `insert into agent_schedules (agent, is_active, frequency, hour) values ('purchase', true, 'weekly', 7)`);
+    const [mine] = await as<{ c: number }>(ADMIN_A, `select count(*)::int as c from purchase_suggestions where trigger = 'schedule'`);
+    assert.equal(mine!.c, 1);
+    const [waiter] = await as<{ c: number }>(WAITER_A, `select count(*)::int as c from purchase_suggestions`);
+    assert.equal(waiter!.c, 0);
+    const [otherAdmin] = await as<{ c: number }>(ADMIN_B, `select count(*)::int as c from agent_schedules`);
+    assert.equal(otherAdmin!.c, 0);
   });
 });

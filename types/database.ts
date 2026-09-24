@@ -116,6 +116,9 @@ type IngredientRow = {
   min_stock: number;
   cost_per_unit: number;
   is_liquor: boolean;
+  supplier_id: string | null;
+  pack_size: number | null;
+  pack_label: string | null;
   updated_at: string;
 };
 
@@ -367,6 +370,54 @@ type TenantAiPlanRow = {
   updated_at: string;
 };
 
+type SupplierRow = {
+  id: string;
+  tenant_id: string;
+  name: string;
+  contact_name: string | null;
+  phone: string | null;
+  email: string | null;
+  lead_time_days: number;
+  notes: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
+type AgentScheduleRow = {
+  id: string;
+  tenant_id: string;
+  agent: 'purchase';
+  is_active: boolean;
+  frequency: 'daily' | 'weekly' | 'biweekly' | 'monthly';
+  weekday: number;
+  day_of_month: number;
+  hour: number;
+  horizon_days: number;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_error: string | null;
+  updated_at: string;
+};
+
+type PurchaseSuggestionRow = {
+  id: string;
+  tenant_id: string;
+  trigger: 'manual' | 'schedule';
+  status: 'draft' | 'received' | 'discarded';
+  horizon_days: number;
+  coverage_from: string;
+  coverage_to: string;
+  history_days: number;
+  lines: Json;
+  notes: Json;
+  total_estimated: number;
+  ai_review: Json | null;
+  created_by: string | null;
+  created_at: string;
+  received_at: string | null;
+  received_by: string | null;
+};
+
 type ProductAvailabilityRow = {
   product_id: string;
   tenant_id: string;
@@ -421,6 +472,9 @@ export type Database = {
       ai_reports: Table<AiReportRow, 'period_from' | 'period_to' | 'model' | 'facts_hash' | 'facts', never>;
       ai_usage: Table<AiUsageRow, 'feature' | 'model', never>;
       tenant_ai_plans: Table<TenantAiPlanRow, 'tenant_id', never>;
+      suppliers: Table<SupplierRow, 'name'>;
+      agent_schedules: Table<AgentScheduleRow, 'agent'>;
+      purchase_suggestions: Table<PurchaseSuggestionRow, 'horizon_days' | 'coverage_from' | 'coverage_to' | 'history_days'>;
     };
     Views: {
       product_availability: { Row: ProductAvailabilityRow; Relationships: [] };
@@ -489,6 +543,10 @@ export type Database = {
       };
       get_business_snapshot: {
         Args: { p_from: string; p_to: string };
+        Returns: Json;
+      };
+      get_purchase_inputs: {
+        Args: { p_tenant: string; p_days?: number };
         Returns: Json;
       };
     };

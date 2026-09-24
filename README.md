@@ -40,7 +40,7 @@ supabase/
   migrations/           Cambios para bases ya creadas (002 catálogo · 003 caja, claves API, QR,
                         imágenes · 004 impuestos, cortesías, descuentos, anulaciones ·
                         005 facturación electrónica · 006 análisis · 007 informes y costos IA ·
-                        008 planes de IA)
+                        008 planes de IA · 009 Comprador)
   seed.sql              Menú, mesas, insumos y recetas demo
 tests/                  Motor de split-bill + integración SQL (PGlite)
 types/                  Tipos de base de datos y dominio
@@ -176,7 +176,8 @@ Todo lo demás (cola, reintentos, notas crédito, recibos con CUFE/CUDE y QR, pa
 | Analista | Informe con hallazgos y acciones | Sí, cuenta del cupo |
 | Vigía | Alertas de caja, inventario, descuentos, anulaciones y demoras | No (reglas) |
 | Ingeniero de menú | Estrella, caballo de batalla, enigma, perro | No (cálculo) |
-| Comprador, Mensajero | Próximamente | — |
+| Comprador | Pedido de compras por pronóstico, programable | No (cálculo); revisión opcional con Haiku |
+| Mensajero | Próximamente | — |
 
 - **Plata detectada** (`lib/analytics/value.ts`): faltantes de caja, faltantes de inventario, mermas, sobrecosto de productos con food cost alto (vs. objetivo 35 %) y descuentos por encima del promedio del equipo. Sólo cifras exactas, nunca estimaciones del modelo. Se muestra junto al gasto de IA del mes.
 - **Resumen del día** en la portada del admin (`lib/analytics/briefing.ts`): hasta 3 puntos del último informe (si tiene 8 días o menos) completados con alertas del Vigía. **No llama al modelo.**
@@ -208,6 +209,40 @@ on conflict (tenant_id) do update set plan = excluded.plan, reports_per_month = 
   monthly_budget_usd = excluded.monthly_budget_usd, updated_at = now();
 ```
 `reports_per_month`, `monthly_budget_usd` y `model_tier` son opcionales para armar paquetes a la medida.
+
+## Agente Comprador
+
+**Admin → Comprador** (`/admin/purchasing`) arma el pedido de compras según lo que vas a vender. **El cálculo no usa IA: su costo es cero.**
+
+### Cómo calcula (`lib/purchasing/forecast.ts`, probado en `tests/purchasing.test.ts`)
+1. **Consumo real:** `get_purchase_inputs` (migración 009) entrega lo que salió de cada insumo por las recetas en las últimas 8 semanas, día por día.
+2. **Patrón semanal:** promedio por día de la semana (un viernes no se proyecta como un martes); las últimas 4 semanas pesan el doble.
+3. **Festivos de Colombia** (`lib/purchasing/holidays.ts`, Ley Emiliani y Semana Santa): el domingo de un puente se proyecta como sábado y se avisa.
+4. **Merma** histórica de cada insumo (tope 30 %).
+5. **Reserva:** el mayor entre el stock de seguridad estadístico (nivel de servicio ~90 %, medido contra el patrón semanal) y el stock mínimo.
+6. **Pedido** = consumo esperado (días de entrega del proveedor + días a cubrir) + reserva − stock, redondeado a **empaques completos** (botella 750 ml, caja x24…).
+7. Marca **urgentes** (se agotan antes de que llegue el pedido) y la **confianza** del pronóstico según la historia disponible.
+
+### Qué hace el administrador
+- **Pedido:** calcular ahora o ver el último; cantidades editables; agrupado por proveedor con **Enviar por WhatsApp** (mensaje de plantilla, sin IA) o **Copiar mensaje**; **Registrar recepción** suma lo recibido al inventario como compra (actualiza el costo promedio).
+- **Horario:** diario, semanal, quincenal o mensual, a la hora local que elija, cubriendo N días.
+- **Proveedores:** nombre, contacto, WhatsApp y días de entrega.
+- **Empaques:** proveedor, nombre y tamaño del empaque de cada insumo.
+- **Revisar con IA (opcional):** Haiku da una segunda mirada de sentido común (≈ USD 0,002, medido). No cambia cantidades, cuenta en el tope de gasto del plan (no en el cupo de informes) y se guarda: no se vuelve a pagar.
+
+El resumen del día avisa cuando hay un pedido listo con insumos urgentes, y **Equipo IA** muestra el estado del Comprador y su próxima ejecución.
+
+### Programación
+`/api/cron/agents` ejecuta los horarios vencidos con el rol de servicio (protegido con `CRON_SECRET`). Vercel Hobby sólo permite crons diarios, así que `vercel.json` lo llama una vez al día como respaldo; para respetar la hora exacta, prográmalo cada hora desde Supabase (gratis). En **Database → Extensions** activa `pg_cron` y `pg_net`, y en el SQL Editor (cambia la URL y tu `CRON_SECRET`):
+
+```sql
+select cron.schedule('gastrobar-agents', '5 * * * *', $$
+  select net.http_get(
+    url := 'https://gastrobar-smoky.vercel.app/api/cron/agents',
+    headers := jsonb_build_object('Authorization', 'Bearer TU_CRON_SECRET')
+  );
+$$);
+```
 
 ## Capa de herramientas para agentes de IA
 

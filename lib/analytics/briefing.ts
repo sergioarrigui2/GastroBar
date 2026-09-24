@@ -9,8 +9,10 @@ export type BriefingItem = {
   title: string;
   action: string;
   severity: 'critical' | 'warning' | 'info';
-  source: 'analista' | 'reglas';
+  source: 'analista' | 'reglas' | 'comprador';
 };
+
+export type PendingPurchase = { created_at: string; lines: number; urgent: number; total_label: string } | null;
 
 export const BRIEFING_REPORT_MAX_AGE_DAYS = 8;
 
@@ -19,12 +21,24 @@ const RANK = { critical: 0, warning: 1, opportunity: 2, info: 2 } as const;
 export function buildBriefing(input: {
   report: { content: AnalystReport; created_at: string } | null;
   anomalies: Anomaly[];
+  purchase?: PendingPurchase;
   now?: Date;
   limit?: number;
 }): BriefingItem[] {
   const now = input.now ?? new Date();
   const limit = input.limit ?? 3;
   const items: BriefingItem[] = [];
+
+  // Un pedido pendiente con insumos urgentes va primero: es lo que se agota hoy.
+  const p = input.purchase;
+  if (p && p.lines > 0 && now.getTime() - new Date(p.created_at).getTime() <= 3 * 86_400_000) {
+    items.push({
+      title: p.urgent > 0 ? `Pedido listo: ${p.urgent} insumo(s) urgente(s)` : `Pedido listo: ${p.lines} insumo(s) por comprar`,
+      action: `El Comprador preparó el pedido (${p.total_label}). Revísalo y envíalo a tus proveedores.`,
+      severity: p.urgent > 0 ? 'critical' : 'info',
+      source: 'comprador',
+    });
+  }
 
   const fresh =
     input.report && now.getTime() - new Date(input.report.created_at).getTime() <= BRIEFING_REPORT_MAX_AGE_DAYS * 86_400_000;

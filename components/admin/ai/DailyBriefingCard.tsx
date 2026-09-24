@@ -1,4 +1,4 @@
-import { AlertOctagon, AlertTriangle, BrainCircuit, Lightbulb, ShieldAlert, Sparkles } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, BrainCircuit, Lightbulb, ShieldAlert, ShoppingCart, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import type { DailyBriefing } from '@/lib/services/ai-team';
 import { cn } from '@/lib/utils';
@@ -40,7 +40,11 @@ export function DailyBriefingCard({ briefing, name }: { briefing: DailyBriefing;
                   <p className="text-sm font-semibold">{item.title}</p>
                   <p className="text-sm text-zinc-600 dark:text-zinc-400">{item.action}</p>
                   <p className="flex items-center gap-1 text-xs text-zinc-500">
-                    {item.source === 'analista' ? (
+                    {item.source === 'comprador' ? (
+                      <Link href="/admin/purchasing" className="flex items-center gap-1 font-semibold text-brand-600 hover:underline">
+                        <ShoppingCart className="size-3.5" aria-hidden /> Comprador · ver pedido
+                      </Link>
+                    ) : item.source === 'analista' ? (
                       <>
                         <BrainCircuit className="size-3.5" aria-hidden /> Analista
                       </>

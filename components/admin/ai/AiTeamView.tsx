@@ -217,10 +217,39 @@ export function AiTeamView({
             icon={<ShoppingCart className="size-6" />}
             name="Comprador"
             role="Arma tu pedido de compras según lo que vas a vender, a la hora que tú programes."
-            status="Próximamente"
-            statusTone="soon"
-            cost="Cálculo exacto + IA sólo para redactar el pedido"
-          />
+            status={o.purchase.active ? 'Programado · sin costo' : 'Activo · sin costo'}
+            statusTone="free"
+            cost="Cálculo exacto · IA opcional para revisar (Haiku)"
+            href="/admin/purchasing"
+            cta={o.purchase.latest?.status === 'draft' ? 'Ver pedido' : 'Calcular pedido'}
+          >
+            {o.purchase.latest ? (
+              <div className="space-y-1">
+                <p className="font-medium">
+                  {o.purchase.latest.status === 'draft' ? 'Pedido listo por enviar' : 'Último pedido'}: {o.purchase.latest.lines} insumo(s) ·{' '}
+                  {money(o.purchase.latest.total)}
+                </p>
+                {o.purchase.latest.urgent > 0 && o.purchase.latest.status === 'draft' && (
+                  <p className="text-xs font-semibold text-red-600">{o.purchase.latest.urgent} insumo(s) urgente(s)</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-zinc-500">Aún no ha calculado ningún pedido.</p>
+            )}
+            {o.purchase.nextRunAt && (
+              <p className="mt-1 text-xs text-zinc-500">
+                Próximo pedido automático:{' '}
+                {new Intl.DateTimeFormat(tenant.locale, {
+                  timeZone: tenant.timezone,
+                  weekday: 'long',
+                  day: 'numeric',
+                  month: 'short',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                }).format(new Date(o.purchase.nextRunAt))}
+              </p>
+            )}
+          </AgentCard>
 
           <AgentCard
             icon={<CalendarClock className="size-6" />}
