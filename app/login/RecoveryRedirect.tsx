@@ -12,8 +12,9 @@ export function RecoveryRedirect() {
     const hash = new URLSearchParams(window.location.hash.slice(1));
     if (hash.get('type') === 'recovery' && hash.get('access_token')) {
       window.location.replace(`/auth/reset${window.location.hash}`);
-    } else if (hash.get('error_code') === 'otp_expired') {
-      window.location.replace('/auth/forgot?error=expired');
+    } else if (hash.get('error_code')) {
+      // Enlace vencido o ya usado (confirmación o recuperación): mostrar la ayuda del login.
+      window.location.replace('/login?error=confirm');
     }
   }, []);
   return null;

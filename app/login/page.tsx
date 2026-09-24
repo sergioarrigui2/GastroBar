@@ -23,7 +23,8 @@ export default async function LoginPage({
         </div>
         {error === 'confirm' && (
           <p className="mb-4 rounded-xl bg-red-100 p-3 text-sm text-red-800 dark:bg-red-500/15 dark:text-red-200">
-            El enlace de confirmación no es válido o expiró. Intenta de nuevo desde /onboarding.
+            No pudimos abrir tu sesión con ese enlace. Si acabas de confirmar tu correo, ingresa aquí con tu correo y
+            contraseña; si aún no terminas de crear tu gastrobar, te llevaremos a hacerlo.
           </p>
         )}
         {error === 'ai_agent' && (
