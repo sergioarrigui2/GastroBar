@@ -7,6 +7,7 @@ import { TenantContextError, type TenantContext } from '@/lib/tenant-context';
 import type { AppRole } from '@/types/domain';
 import { createOrderTool } from './tools/create-order';
 import { getBarMetricsTool } from './tools/get-bar-metrics';
+import { getBusinessAnalysisTool } from './tools/get-business-analysis';
 import { getMenuAvailabilityTool } from './tools/get-menu-availability';
 import { getTableStatusTool } from './tools/get-table-status';
 import { processSplitPaymentTool } from './tools/process-split-payment';
@@ -15,6 +16,7 @@ import type { AiToolDefinition, AiToolResult } from './types';
 export type { AiToolDefinition, AiToolResult } from './types';
 export { createOrderInput } from './tools/create-order';
 export { getBarMetricsInput } from './tools/get-bar-metrics';
+export { getBusinessAnalysisInput } from './tools/get-business-analysis';
 export { getMenuAvailabilityInput } from './tools/get-menu-availability';
 export { getTableStatusInput } from './tools/get-table-status';
 export { processSplitPaymentInput } from './tools/process-split-payment';
@@ -26,6 +28,7 @@ export const aiTools = {
   create_order_tool: createOrderTool,
   process_split_payment_tool: processSplitPaymentTool,
   get_bar_metrics_tool: getBarMetricsTool,
+  get_business_analysis_tool: getBusinessAnalysisTool,
 } as const;
 
 export type AiToolName = keyof typeof aiTools;

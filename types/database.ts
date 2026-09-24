@@ -316,6 +316,47 @@ type EInvoiceDocumentRow = {
   updated_at: string;
 };
 
+type AiReportRow = {
+  id: string;
+  tenant_id: string;
+  kind: 'business';
+  period_from: string;
+  period_to: string;
+  range_key: string | null;
+  status: 'completed' | 'failed';
+  model: string;
+  facts_hash: string;
+  facts: Json;
+  content: Json | null;
+  verification: Json | null;
+  error: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  duration_ms: number | null;
+  cost_usd: number | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+type AiUsageRow = {
+  id: string;
+  tenant_id: string;
+  feature: 'analyst_report' | 'purchase_agent' | 'analyst_chat';
+  model: string;
+  status: 'ok' | 'error';
+  input_tokens: number;
+  output_tokens: number;
+  reasoning_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  cost_usd: number | null;
+  duration_ms: number | null;
+  reference_id: string | null;
+  error: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
 type ProductAvailabilityRow = {
   product_id: string;
   tenant_id: string;
@@ -367,6 +408,8 @@ export type Database = {
       cash_movements: Table<CashMovementRow, 'session_id' | 'movement_type' | 'amount' | 'reason'>;
       einvoice_credentials: Table<EInvoiceCredentialsRow, 'tenant_id' | 'provider' | 'encrypted_config'>;
       einvoice_documents: Table<EInvoiceDocumentRow, 'order_id' | 'doc_type' | 'provider' | 'environment' | 'payload'>;
+      ai_reports: Table<AiReportRow, 'period_from' | 'period_to' | 'model' | 'facts_hash' | 'facts', never>;
+      ai_usage: Table<AiUsageRow, 'feature' | 'model', never>;
     };
     Views: {
       product_availability: { Row: ProductAvailabilityRow; Relationships: [] };
@@ -431,6 +474,10 @@ export type Database = {
       void_payment: { Args: { p_payment_id: string; p_reason: string }; Returns: Json };
       get_shift_metrics: {
         Args: { p_from?: string; p_to?: string };
+        Returns: Json;
+      };
+      get_business_snapshot: {
+        Args: { p_from: string; p_to: string };
         Returns: Json;
       };
     };

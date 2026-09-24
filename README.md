@@ -39,7 +39,7 @@ supabase/
   schema.sql            Tablas, enums, RLS, triggers, RPCs, vista, Realtime
   migrations/           Cambios para bases ya creadas (002 catálogo · 003 caja, claves API, QR,
                         imágenes · 004 impuestos, cortesías, descuentos, anulaciones ·
-                        005 facturación electrónica)
+                        005 facturación electrónica · 006 análisis · 007 informes IA)
   seed.sql              Menú, mesas, insumos y recetas demo
 tests/                  Motor de split-bill + integración SQL (PGlite)
 types/                  Tipos de base de datos y dominio
@@ -153,6 +153,19 @@ Todo lo demás (cola, reintentos, notas crédito, recibos con CUFE/CUDE y QR, pa
 - La vista `product_availability` calcula las porciones posibles de cada producto; el comandero marca "Agotado" / "Quedan N".
 - Las mermas, compras (con costo promedio ponderado) y ajustes se registran con `record_inventory_movement`.
 
+## Análisis del negocio y Agente Analista
+
+**Admin → Análisis** (`/admin/analytics`) compara el periodo elegido (7, 30 o 90 días) con el anterior de igual duración.
+
+- **Cálculo exacto, sin IA** (`get_business_snapshot`, migración 006): KPIs, ventas por día, día de la semana y hora, rentabilidad por producto con el costo real de los movimientos de inventario, desempeño por mesero, tiempos de cocina y barra, cierres de caja y consumo de insumos por causa (ventas, mermas, faltantes).
+- **Interpretación determinista** (`lib/analytics/analyze.ts`, probada en `tests/analytics.test.ts`): ingeniería de menú (estrella, caballo de batalla, enigma, perro) y alertas por reglas con umbrales ajustables (`THRESHOLDS`): caída de ventas, food cost, faltantes de inventario, mermas, diferencias de caja, descuentos o anulaciones fuera de lo normal por persona, demoras y días atípicos.
+- **Informe del Analista IA** (`lib/analyst`): el resumen se convierte en una lista de hechos con id citable. Una sola llamada al modelo (por defecto `claude-sonnet-5`) devuelve un informe con esquema Zod: titular, estado, resumen, lo que va bien, hallazgos con evidencia, impacto y acción, decisiones de menú y preguntas.
+  - **Verificación:** cada cifra de la evidencia debe aparecer en los hechos y cada id citado debe existir. Si no, se pide una corrección (una vez); lo que siga sin verificar se marca en pantalla.
+  - **Costo controlado:** si los hechos no cambiaron, se reutiliza el informe guardado (`facts_hash`); máximo 10 informes por gastrobar cada 24 horas. Esfuerzo de razonamiento `medium` por defecto (`ANALYST_EFFORT`): medido con datos reales, ~33 s y ~USD 0,036 por informe, frente a ~72 s y ~USD 0,085 con el valor por defecto del modelo.
+  - **Registro de costos** (**Admin → Consumo IA**, tabla `ai_usage`, migración 007): una fila por cada llamada al modelo, incluidas las fallidas, con tokens de entrada, salida, razonamiento y caché, duración y costo en USD calculado con los precios oficiales (`lib/ai/pricing.ts`). El costo queda congelado en la fila; el registro no se puede editar ni borrar.
+  - **Privacidad:** al modelo sólo le llegan cifras agregadas y nombres de productos y personal; nunca datos de clientes.
+  - Requiere `ANTHROPIC_API_KEY` en el servidor; sin ella el tablero funciona y el informe queda desactivado.
+
 ## Capa de herramientas para agentes de IA
 
 | Herramienta | Qué hace |
@@ -162,6 +175,7 @@ Todo lo demás (cola, reintentos, notas crédito, recibos con CUFE/CUDE y QR, pa
 | `create_order_tool` | Crea la comanda o agrega una ronda; dispara Realtime a cocina/barra |
 | `process_split_payment_tool` | Calcula (`calculate`) o registra (`register`) la división |
 | `get_bar_metrics_tool` | Ventas, ticket promedio, costo de insumos, mermas, márgenes, top productos |
+| `get_business_analysis_tool` | Análisis de un periodo vs. el anterior: ingeniería de menú, equipo, horarios, inventario y alertas |
 
 Cada herramienta tiene esquema Zod, lista de roles permitidos y se ejecuta con el cliente de Supabase **del usuario agente**, así que RLS la limita a su tenant.
 

@@ -441,3 +441,77 @@ describe('facturación electrónica', () => {
     assert.equal(row!.attempts, 0);
   });
 });
+
+describe('resumen del negocio', () => {
+  const range = [new Date(Date.now() - 86_400_000).toISOString(), new Date(Date.now() + 60_000).toISOString()];
+
+  test('agrega ventas, costos reales por producto, personal y estaciones del periodo', async () => {
+    const { s } = await one<{ s: Record<string, any> }>(ADMIN_A, `select public.get_business_snapshot($1, $2) as s`, range);
+    const paid = await one<{ n: number; total: string }>(
+      ADMIN_A,
+      `select count(*)::int as n, coalesce(sum(total), 0) as total from orders where status = 'paid'`,
+    );
+    assert.equal(s.kpis.orders, paid.n);
+    assert.equal(Number(s.kpis.revenue), Number(paid.total));
+    assert.equal(s.previous_kpis.orders, 0);
+    assert.ok(s.period.days >= 1);
+
+    // El costo por producto sale de los movimientos reales de inventario (mojito: ron 60 ml + jarabe).
+    const mojito = s.products.find((p: { name: string }) => p.name === 'Mojito');
+    assert.ok(mojito && mojito.quantity > 0);
+    assert.ok(Number(mojito.cost) > 0 && Number(mojito.net_revenue) > Number(mojito.cost));
+    const productsRevenue = s.products.reduce((sum: number, p: { revenue: string }) => sum + Number(p.revenue), 0);
+    assert.ok(productsRevenue >= Number(s.kpis.revenue) - Number(s.kpis.discounts) - 1);
+
+    assert.ok(s.staff.some((w: { name: string }) => w.name === 'Walter'));
+    assert.equal(s.daily.reduce((n: number, d: { orders: number }) => n + d.orders, 0), paid.n);
+    assert.ok(Array.isArray(s.inventory.usage) && s.inventory.usage.length > 0);
+  });
+
+  test('sólo admin/agente, sin fugas entre tenants y con rango válido', async () => {
+    await assert.rejects(as(WAITER_A, `select public.get_business_snapshot($1, $2)`, range), /forbidden/);
+    await assert.rejects(as(ADMIN_A, `select public.get_business_snapshot($2, $1)`, range), /invalid_range/);
+    const { s } = await one<{ s: Record<string, any> }>(ADMIN_B, `select public.get_business_snapshot($1, $2) as s`, range);
+    assert.equal(s.kpis.orders, 0);
+    assert.equal(s.products.length, 0);
+    assert.equal(s.inventory.usage.length, 0);
+  });
+});
+
+describe('informes del analista', () => {
+  const report = (uid: string) =>
+    as(uid, `insert into ai_reports (period_from, period_to, model, facts_hash, facts, content)
+             values (now() - interval '7 days', now(), 'test-model', 'h1', '[]'::jsonb, '{}'::jsonb) returning id`);
+
+  test('sólo el admin del tenant crea y ve informes; no se pueden editar', async () => {
+    const [created] = await report(ADMIN_A);
+    await assert.rejects(report(WAITER_A), /row-level security/);
+    const [mine] = await as<{ c: number }>(ADMIN_A, `select count(*)::int as c from ai_reports`);
+    assert.equal(mine!.c, 1);
+    const [waiter] = await as<{ c: number }>(WAITER_A, `select count(*)::int as c from ai_reports`);
+    assert.equal(waiter!.c, 0);
+    const [other] = await as<{ c: number }>(ADMIN_B, `select count(*)::int as c from ai_reports`);
+    assert.equal(other!.c, 0);
+    await as(ADMIN_A, `update ai_reports set model = 'x' where id = $1`, [(created as { id: string }).id]);
+    const [row] = await as<{ model: string }>(ADMIN_A, `select model from ai_reports where id = $1`, [(created as { id: string }).id]);
+    assert.equal(row!.model, 'test-model');
+  });
+});
+
+describe('registro de costos de IA', () => {
+  test('admin registra y ve su consumo; meseros y otros tenants no; no se edita ni borra', async () => {
+    const insert = (uid: string) =>
+      as(uid, `insert into ai_usage (feature, model, input_tokens, output_tokens, cost_usd) values ('analyst_report', 'claude-sonnet-5', 4695, 2704, 0.03643) returning id`);
+    const [row] = await insert(ADMIN_A);
+    await assert.rejects(insert(WAITER_A), /row-level security/);
+    const [mine] = await as<{ c: number; total: string }>(ADMIN_A, `select count(*)::int as c, sum(cost_usd) as total from ai_usage`);
+    assert.equal(mine!.c, 1);
+    assert.equal(Number(mine!.total), 0.03643);
+    const [other] = await as<{ c: number }>(ADMIN_B, `select count(*)::int as c from ai_usage`);
+    assert.equal(other!.c, 0);
+    await as(ADMIN_A, `update ai_usage set cost_usd = 0 where id = $1`, [(row as { id: string }).id]);
+    await as(ADMIN_A, `delete from ai_usage where id = $1`, [(row as { id: string }).id]);
+    const [after] = await as<{ cost: string }>(ADMIN_A, `select cost_usd as cost from ai_usage where id = $1`, [(row as { id: string }).id]);
+    assert.equal(Number(after!.cost), 0.03643);
+  });
+});
