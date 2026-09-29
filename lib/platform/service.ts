@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { resolveAgentAccess } from '@/lib/ai/access';
 import { AGENT_ORDER, type AgentId } from '@/lib/ai/agents';
 import { AI_PLANS, resolvePlan } from '@/lib/ai/plans';
+import { CO_DEPARTMENTS } from '@/lib/geo/colombia';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
 /**
@@ -19,7 +20,7 @@ export async function listTenants() {
   const admin = createSupabaseAdminClient();
   const since = monthStartUtc();
   const [tenants, profiles, agents, plans, usage] = await Promise.all([
-    admin.from('tenants').select('id, name, slug, status, status_reason, created_at').order('created_at', { ascending: false }),
+    admin.from('tenants').select('id, name, slug, city, department, status, status_reason, created_at').order('created_at', { ascending: false }),
     admin.from('profiles').select('tenant_id, role, is_active'),
     admin.from('tenant_agents').select('tenant_id, agent, enabled, trial_until'),
     admin.from('tenant_ai_plans').select('tenant_id, plan, reports_per_month, monthly_budget_usd, model_tier'),
@@ -66,6 +67,8 @@ export const createTenantSchema = z.object({
     .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'El identificador sólo admite minúsculas, números y guiones')
     .min(3)
     .max(48),
+  city: z.string().trim().min(2, 'Escribe la ciudad').max(80),
+  department: z.enum(CO_DEPARTMENTS, 'Selecciona el departamento'),
   owner_name: z.string().trim().min(2, 'Escribe el nombre del dueño').max(80),
   owner_email: z.email('Correo inválido'),
   owner_password: z.string().min(10, 'La contraseña inicial debe tener al menos 10 caracteres').max(72),
@@ -104,7 +107,7 @@ export async function createTenant(input: z.input<typeof createTenantSchema>) {
   try {
     const { data: tenant, error: tenantError } = await admin
       .from('tenants')
-      .insert({ name: data.business_name, slug: data.slug })
+      .insert({ name: data.business_name, slug: data.slug, city: data.city, department: data.department })
       .select('id')
       .single();
     if (tenantError) throw tenantError;

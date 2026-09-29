@@ -13,7 +13,7 @@ export function Ticket({
   autoPrint,
   large = false,
 }: {
-  tenant: Pick<Tenant, 'name' | 'tax_id' | 'address' | 'phone'>;
+  tenant: Pick<Tenant, 'name' | 'tax_id' | 'address' | 'city' | 'phone'>;
   title: string;
   subtitle?: ReactNode;
   children: ReactNode;
@@ -33,7 +33,7 @@ export function Ticket({
         <header className="text-center">
           <p className="text-[15px] font-bold uppercase">{tenant.name}</p>
           {tenant.tax_id && <p>NIT {tenant.tax_id}</p>}
-          {tenant.address && <p>{tenant.address}</p>}
+          {(tenant.address || tenant.city) && <p>{[tenant.address, tenant.city].filter(Boolean).join(' · ')}</p>}
           {tenant.phone && <p>Tel. {tenant.phone}</p>}
           <Rule />
           <p className="text-[15px] font-bold uppercase">{title}</p>

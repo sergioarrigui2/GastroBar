@@ -666,3 +666,14 @@ describe('plataforma', () => {
     await assert.rejects(as(ADMIN_B, `insert into platform_admins (user_id) values ($1)`, [ADMIN_B]), /row-level security/);
   });
 });
+
+describe('ubicación del gastrobar', () => {
+  test('el admin guarda ciudad y departamento; valores vacíos o absurdos se rechazan', async () => {
+    await as(ADMIN_A, `update tenants set city = 'Bogotá', department = 'Bogotá D. C.'`);
+    const [t] = await as<{ city: string; department: string }>(ADMIN_A, `select city, department from tenants`);
+    assert.deepEqual(t, { city: 'Bogotá', department: 'Bogotá D. C.' });
+    await assert.rejects(as(ADMIN_A, `update tenants set city = 'X'`), /tenants_city_len/);
+    const [other] = await as<{ city: string | null }>(ADMIN_B, `select city from tenants`);
+    assert.equal(other!.city, null, 'la ciudad de A no aparece para B');
+  });
+});

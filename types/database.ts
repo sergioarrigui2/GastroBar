@@ -36,6 +36,8 @@ type TenantRow = {
   created_at: string;
   tax_id: string | null;
   address: string | null;
+  city: string | null;
+  department: string | null;
   phone: string | null;
   receipt_footer: string | null;
   public_menu_enabled: boolean;

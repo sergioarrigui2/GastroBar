@@ -208,6 +208,7 @@ export default async function HelpPage() {
               ['Moneda / formato', 'COP · es-CO', 'Cómo se muestran los precios'],
               ['Zona horaria', 'America/Bogota', 'Horas de tickets, cortes y métricas'],
               ['NIT, teléfono, dirección', 'Los de tu negocio', 'Encabezado del recibo'],
+              ['Ciudad y departamento', 'Bogotá · Bogotá D. C.', 'Recibos y facturación electrónica (obligatorio)'],
               ['Impuesto', 'INC · 8 %', <>Tarifa por defecto. Los precios del menú ya lo <b>incluyen</b></>],
               ['Semáforo KDS', 'Amarillo 10 · Rojo 20 min', 'Cuándo una comanda se ve demorada'],
               ['Menú público', 'Activado', <>Habilita <Code>{menuPath}</Code> para tus clientes</>],

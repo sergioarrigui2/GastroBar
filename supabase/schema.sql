@@ -3556,3 +3556,19 @@ returns jsonb language sql stable security definer set search_path = '' as $$
   from public.tenants t
   where t.slug = lower(p_slug) and t.public_menu_enabled and t.status = 'active'
 $$;
+
+-- =============================================================================
+-- 24. UBICACIÓN DEL GASTROBAR (también en migrations/013_tenant_location.sql)
+-- =============================================================================
+
+alter table public.tenants add column if not exists city text;
+alter table public.tenants add column if not exists department text;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'tenants_city_len') then
+    alter table public.tenants add constraint tenants_city_len check (city is null or char_length(city) between 2 and 80);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'tenants_department_len') then
+    alter table public.tenants add constraint tenants_department_len check (department is null or char_length(department) between 2 and 60);
+  end if;
+end $$;

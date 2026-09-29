@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CO_DEPARTMENTS } from '@/lib/geo/colombia';
 import { stationSchema } from './order';
 
 const id = z.uuid();
@@ -107,6 +108,8 @@ export const tenantSettingsSchema = z
     prices_include_tax: z.boolean(),
     tax_id: z.string().trim().max(40).nullable(),
     address: z.string().trim().max(200).nullable(),
+    city: z.string().trim().min(2, 'Escribe la ciudad').max(80).nullable(),
+    department: z.enum(CO_DEPARTMENTS).nullable(),
     phone: z.string().trim().max(40).nullable(),
     receipt_footer: z.string().trim().max(300).nullable(),
   })

@@ -41,7 +41,8 @@ supabase/
                         imágenes · 004 impuestos, cortesías, descuentos, anulaciones ·
                         005 facturación electrónica · 006 análisis · 007 informes y costos IA ·
                         008 planes de IA · 009 Comprador · 010 Mensajero ·
-                        011 plataforma · 012 endurecimiento multi-tenant)
+                        011 plataforma · 012 endurecimiento multi-tenant ·
+                        013 ciudad y departamento)
   seed.sql              Menú, mesas, insumos y recetas demo
 tests/                  Motor de split-bill + integración SQL (PGlite)
 types/                  Tipos de base de datos y dominio

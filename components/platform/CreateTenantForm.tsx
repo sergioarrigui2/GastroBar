@@ -7,6 +7,7 @@ import { AgentAvatar } from '@/components/admin/ai/AgentAvatar';
 import { FlashMessage, useAdminMutation } from '@/components/admin/useAdminMutation';
 import { Button, Card, Input, Label, Select } from '@/components/ui/primitives';
 import { AGENT_ORDER, AGENTS, type AgentId } from '@/lib/ai/agents';
+import { CO_CITY_SUGGESTIONS, CO_DEPARTMENTS } from '@/lib/geo/colombia';
 
 const slugify = (v: string) =>
   v
@@ -23,6 +24,8 @@ export function CreateTenantForm({ plans }: { plans: Array<{ id: string; label: 
   const [form, setForm] = useState({
     business_name: '',
     slug: '',
+    city: '',
+    department: '',
     owner_name: '',
     owner_email: '',
     owner_password: '',
@@ -57,6 +60,28 @@ export function CreateTenantForm({ plans }: { plans: Array<{ id: string; label: 
             set('slug', slugify(e.target.value));
           }}
         />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <Label htmlFor="t-city">Ciudad o municipio</Label>
+          <Input id="t-city" value={form.city} onChange={(e) => set('city', e.target.value)} list="t-cities" />
+          <datalist id="t-cities">
+            {CO_CITY_SUGGESTIONS.map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
+        </div>
+        <div>
+          <Label htmlFor="t-dep">Departamento</Label>
+          <Select id="t-dep" value={form.department} onChange={(e) => set('department', e.target.value)}>
+            <option value="">Selecciona…</option>
+            {CO_DEPARTMENTS.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </Select>
+        </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
@@ -114,10 +139,10 @@ export function CreateTenantForm({ plans }: { plans: Array<{ id: string; label: 
 
       <Button
         className="w-full"
-        disabled={pending || !form.business_name || !form.slug || !form.owner_email || form.owner_password.length < 10}
+        disabled={pending || !form.business_name || !form.slug || !form.city || !form.department || !form.owner_email || form.owner_password.length < 10}
         onClick={() =>
           run(
-            () => createTenantAction({ ...form, agents, plan: form.plan as 'pro' }),
+            () => createTenantAction({ ...form, department: form.department as (typeof CO_DEPARTMENTS)[number], agents, plan: form.plan as 'pro' }),
             'Cliente creado',
             (id) => router.push(`/platform/tenants/${id}`),
           )

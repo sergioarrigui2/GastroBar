@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { updateTenantSettingsAction } from '@/app/actions/catalog';
 import { Button, Card, Input, Label, Select } from '@/components/ui/primitives';
+import { CO_CITY_SUGGESTIONS, CO_DEPARTMENTS } from '@/lib/geo/colombia';
 import type { Tenant } from '@/types/domain';
 import { FlashMessage, toNumber, useAdminMutation } from './useAdminMutation';
 
@@ -48,6 +49,8 @@ export function SettingsForm({ tenant }: { tenant: Tenant }) {
   const [publicMenu, setPublicMenu] = useState(tenant.public_menu_enabled);
   const [taxId, setTaxId] = useState(tenant.tax_id ?? '');
   const [address, setAddress] = useState(tenant.address ?? '');
+  const [city, setCity] = useState(tenant.city ?? '');
+  const [department, setDepartment] = useState(tenant.department ?? '');
   const [phone, setPhone] = useState(tenant.phone ?? '');
   const [footer, setFooter] = useState(tenant.receipt_footer ?? '');
   const [taxName, setTaxName] = useState(tenant.tax_name);
@@ -68,6 +71,8 @@ export function SettingsForm({ tenant }: { tenant: Tenant }) {
           public_menu_enabled: publicMenu,
           tax_id: taxId.trim() || null,
           address: address.trim() || null,
+          city: city.trim() || null,
+          department: (department || null) as (typeof CO_DEPARTMENTS)[number] | null,
           phone: phone.trim() || null,
           receipt_footer: footer.trim() || null,
           tax_name: taxName.trim() || 'INC',
@@ -135,7 +140,27 @@ export function SettingsForm({ tenant }: { tenant: Tenant }) {
           </div>
           <div className="sm:col-span-2">
             <Label htmlFor="s-address">Dirección</Label>
-            <Input id="s-address" value={address} onChange={(e) => setAddress(e.target.value)} />
+            <Input id="s-address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Cra. 11 # 93-40, local 2" />
+          </div>
+          <div>
+            <Label htmlFor="s-city">Ciudad o municipio</Label>
+            <Input id="s-city" value={city} onChange={(e) => setCity(e.target.value)} list="co-cities" autoComplete="address-level2" />
+            <datalist id="co-cities">
+              {CO_CITY_SUGGESTIONS.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
+          </div>
+          <div>
+            <Label htmlFor="s-department">Departamento</Label>
+            <Select id="s-department" value={department} onChange={(e) => setDepartment(e.target.value)}>
+              <option value="">Selecciona…</option>
+              {CO_DEPARTMENTS.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </Select>
           </div>
           <div className="sm:col-span-2">
             <Label htmlFor="s-footer">Pie del recibo</Label>

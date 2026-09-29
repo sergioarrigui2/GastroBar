@@ -37,7 +37,8 @@ export async function getSetupStatus(ctx: TenantContext): Promise<SetupStatus> {
   ]);
 
   const steps: Record<SetupStepId, boolean> = {
-    settings: Boolean(tenant.tax_id || tenant.address || tenant.phone),
+    // La ciudad es obligatoria (recibos y, más adelante, facturación electrónica).
+    settings: Boolean(tenant.city && (tenant.tax_id || tenant.address || tenant.phone)),
     floor: tables > 0,
     ingredients: ingredients > 0,
     menu: products > 0 && recipes > 0,

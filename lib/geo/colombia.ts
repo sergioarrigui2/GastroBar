@@ -1,0 +1,43 @@
+/** Los 32 departamentos de Colombia y Bogotá D. C. (DIVIPOLA). */
+export const CO_DEPARTMENTS = [
+  'Amazonas',
+  'Antioquia',
+  'Arauca',
+  'Atlántico',
+  'Bogotá D. C.',
+  'Bolívar',
+  'Boyacá',
+  'Caldas',
+  'Caquetá',
+  'Casanare',
+  'Cauca',
+  'Cesar',
+  'Chocó',
+  'Córdoba',
+  'Cundinamarca',
+  'Guainía',
+  'Guaviare',
+  'Huila',
+  'La Guajira',
+  'Magdalena',
+  'Meta',
+  'Nariño',
+  'Norte de Santander',
+  'Putumayo',
+  'Quindío',
+  'Risaralda',
+  'San Andrés y Providencia',
+  'Santander',
+  'Sucre',
+  'Tolima',
+  'Valle del Cauca',
+  'Vaupés',
+  'Vichada',
+] as const;
+
+/** Ciudades frecuentes para sugerir mientras se escribe (se puede escribir cualquier municipio). */
+export const CO_CITY_SUGGESTIONS = [
+  'Bogotá', 'Medellín', 'Cali', 'Barranquilla', 'Cartagena', 'Bucaramanga', 'Pereira', 'Manizales', 'Santa Marta',
+  'Cúcuta', 'Ibagué', 'Villavicencio', 'Pasto', 'Neiva', 'Armenia', 'Montería', 'Valledupar', 'Popayán', 'Tunja',
+  'Sincelejo', 'Riohacha', 'Envigado', 'Chía', 'Rionegro', 'Soacha', 'Bello', 'Itagüí', 'Floridablanca', 'Palmira',
+] as const;

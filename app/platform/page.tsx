@@ -61,7 +61,7 @@ export default async function PlatformHome() {
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold">{t.name}</p>
-                    <span className="text-xs text-zinc-500">/{t.slug}</span>
+                    <span className="text-xs text-zinc-500">/{t.slug}{t.city ? ` · ${t.city}` : ''}</span>
                     {t.status === 'suspended' ? (
                       <Badge className="bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-200">Suspendido</Badge>
                     ) : (

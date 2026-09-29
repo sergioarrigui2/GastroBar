@@ -28,7 +28,7 @@ export default async function TenantPage({ params }: { params: Promise<{ id: str
       <div>
         <h1 className="text-2xl font-bold">{tenant.name}</h1>
         <p className="text-sm text-zinc-500">
-          /{tenant.slug} · creado {when(tenant.created_at)} · {detail.profiles.filter((p) => p.is_active).length} usuario(s)
+          /{tenant.slug} · {tenant.city ? `${tenant.city}, ${tenant.department ?? ''} · ` : 'Sin ciudad · '}creado {when(tenant.created_at)} · {detail.profiles.filter((p) => p.is_active).length} usuario(s)
         </p>
       </div>
 
