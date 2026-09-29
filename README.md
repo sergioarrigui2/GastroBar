@@ -41,7 +41,7 @@ supabase/
                         imágenes · 004 impuestos, cortesías, descuentos, anulaciones ·
                         005 facturación electrónica · 006 análisis · 007 informes y costos IA ·
                         008 planes de IA · 009 Comprador · 010 Mensajero ·
-                        011 plataforma)
+                        011 plataforma · 012 endurecimiento multi-tenant)
   seed.sql              Menú, mesas, insumos y recetas demo
 tests/                  Motor de split-bill + integración SQL (PGlite)
 types/                  Tipos de base de datos y dominio
@@ -146,6 +146,22 @@ Todo lo demás (cola, reintentos, notas crédito, recibos con CUFE/CUDE y QR, pa
 - **Máquina de estados:** el estado de la orden se deriva de sus ítems y pagos; cocina/barra sólo actualizan ítems **de su estación** (política RLS) y no pueden cancelar.
 - **Pagos inmutables:** sin UPDATE/DELETE; se bloquean sobrepagos y sobre-asignación por ítem.
 - **Realtime respeta RLS:** cada pantalla sólo recibe eventos de su tenant.
+
+## Aislamiento multi-tenant (auditado)
+
+`tests/multitenancy.test.ts` crea dos gastrobares con datos en **todas** las tablas y ataca desde cada rol del segundo (admin, caja, mesero, cocina, barra, agente IA) contra el primero. La lista de tablas sale del catálogo de Postgres, así que una tabla nueva con `tenant_id` queda cubierta sin tocar la prueba.
+
+| Ataque | Resultado esperado |
+|---|---|
+| Leer filas de otro gastrobar (29 tablas × 6 roles) y como visitante anónimo | 0 filas |
+| Modificar o borrar filas ajenas | 0 filas afectadas |
+| Crear filas a nombre de otro gastrobar (clonando cualquier fila) | rechazado |
+| Mover filas propias a otro gastrobar | rechazado |
+| Funciones del sistema con IDs ajenos (comandas, cobros, anulaciones, caja, inventario, catálogo, facturación, análisis, compras) | rechazado |
+| Referencias cruzadas (receta con insumo ajeno, ítem en orden ajena, pago sobre ítem ajeno) | rechazado también por las llaves foráneas compuestas `(tenant_id, id)` |
+| Gastrobar suspendido | sus usuarios no ven ni ejecutan nada (salvo su propio perfil), pierden el rol y su menú público desaparece |
+
+La prueba se validó saboteando políticas a propósito: detecta cada fuga introducida. Barreras: RLS en todas las tablas, funciones `SECURITY DEFINER` que filtran por `private.current_tenant_id()`, llaves foráneas compuestas, almacenamiento de imágenes por carpeta de gastrobar y código con rol de servicio que siempre filtra por el gastrobar de la sesión o del registro procesado.
 
 ## Stock en tiempo real
 

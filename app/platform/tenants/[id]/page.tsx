@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { TenantControls } from '@/components/platform/TenantControls';
 import { Card } from '@/components/ui/primitives';
+import { requirePlatformAdmin } from '@/lib/platform/auth';
 import { getTenantDetail, PLAN_OPTIONS } from '@/lib/platform/service';
 import { formatDateTime } from '@/lib/utils';
 
@@ -12,6 +13,7 @@ const FEATURE: Record<string, string> = { analyst_report: 'Informe del Analista'
 const usd = (n: number, d = 4) => `USD ${n.toFixed(d)}`;
 
 export default async function TenantPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePlatformAdmin();
   const { id } = await params;
   const detail = await getTenantDetail(id).catch(() => null);
   if (!detail) notFound();

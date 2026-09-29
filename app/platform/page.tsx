@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { CreateTenantForm } from '@/components/platform/CreateTenantForm';
 import { AgentAvatar } from '@/components/admin/ai/AgentAvatar';
 import { Badge, Card } from '@/components/ui/primitives';
+import { requirePlatformAdmin } from '@/lib/platform/auth';
 import { listTenants, PLAN_OPTIONS } from '@/lib/platform/service';
 import { cn } from '@/lib/utils';
 
@@ -11,6 +12,8 @@ export const metadata = { title: 'Clientes' };
 const usd = (n: number) => `USD ${n.toFixed(n < 1 ? 3 : 2)}`;
 
 export default async function PlatformHome() {
+  // El layout también lo verifica, pero la página puede ejecutarse en paralelo: se verifica aquí antes de leer datos.
+  await requirePlatformAdmin();
   const tenants = await listTenants();
   const active = tenants.filter((t) => t.status === 'active');
   const totalAgents = active.reduce((s, t) => s + t.activeAgents.length, 0);

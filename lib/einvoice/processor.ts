@@ -151,6 +151,8 @@ async function processOne(
       .from('einvoice_documents')
       .select('provider_document_id, number, cufe, issued_at')
       .eq('id', doc.related_document_id)
+      // Defensa en profundidad: el documento original debe ser del mismo gastrobar.
+      .eq('tenant_id', doc.tenant_id)
       .maybeSingle();
     related = original
       ? { providerDocumentId: original.provider_document_id, number: original.number, cufe: original.cufe, issuedAt: original.issued_at }
