@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { runAction } from '@/lib/actions';
+import { aiImagesStatus, suggestProductsForPhotos } from '@/lib/images/identify';
 import {
   createTablesBulk,
   changeIngredientUnit,
@@ -103,6 +104,16 @@ export async function changeIngredientUnitAction(input: z.input<typeof changeUni
     const { ingredientId, unit, factor } = changeUnitSchema.parse(input);
     await changeIngredientUnit(ctx, ingredientId, unit, factor);
   });
+}
+
+/** Estado del reconocimiento de fotos con IA (cupo del mes). */
+export async function getMenuImagesAiStatusAction() {
+  return runAction(ADMIN, (ctx) => aiImagesStatus(ctx));
+}
+
+/** Sugiere el producto de hasta 8 fotos (miniaturas). Cuenta contra el cupo de IA del mes. */
+export async function suggestPhotoProductsAction(thumbnails: string[]) {
+  return runAction(ADMIN, (ctx) => suggestProductsForPhotos(ctx, thumbnails));
 }
 
 export async function deleteEntityAction(entity: string, id: string) {

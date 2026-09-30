@@ -8,15 +8,17 @@ import { CategoriesPanel } from './CategoriesPanel';
 import { ModifiersPanel } from './ModifiersPanel';
 import type { MenuInsight } from '@/lib/services/agent-notices';
 import { ProductsPanel } from './ProductsPanel';
+import { ImagesPanel } from './ImagesPanel';
 import { SubRecipesPanel } from './SubRecipesPanel';
 
-type Tab = 'products' | 'categories' | 'modifiers' | 'sub-recipes';
+type Tab = 'products' | 'categories' | 'modifiers' | 'sub-recipes' | 'images';
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'products', label: 'Productos' },
   { id: 'categories', label: 'Categorías' },
   { id: 'modifiers', label: 'Modificadores' },
   { id: 'sub-recipes', label: 'Sub-recetas' },
+  { id: 'images', label: 'Imágenes' },
 ];
 
 export type CatalogLookups = {
@@ -99,6 +101,7 @@ export function MenuManager({
       {tab === 'products' && <ProductsPanel catalog={catalog} lookups={lookups} insights={insights} openId={openId} />}
       {tab === 'categories' && <CategoriesPanel catalog={catalog} />}
       {tab === 'modifiers' && <ModifiersPanel catalog={catalog} lookups={lookups} />}
+      {tab === 'images' && <ImagesPanel catalog={catalog} tenantId={tenantId} />}
       {tab === 'sub-recipes' && <SubRecipesPanel catalog={catalog} lookups={lookups} openId={openId} />}
     </div>
   );

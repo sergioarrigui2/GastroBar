@@ -901,3 +901,10 @@ describe('impresión: estación, cola y aislamiento', () => {
     assert.equal((await as(ADMIN_B, `select * from print_stations`)).length, 0);
   });
 });
+
+describe('fotos del menú con IA', () => {
+  test('el consumo se registra como menu_images y no se aceptan tipos inventados', async () => {
+    await as(ADMIN_A, `insert into ai_usage (feature, model, cost_usd) values ('menu_images', 'claude-haiku-4-5', 0.004)`);
+    await assert.rejects(as(ADMIN_A, `insert into ai_usage (feature, model) values ('otra_cosa', 'x')`), /ai_usage_feature_check/);
+  });
+});

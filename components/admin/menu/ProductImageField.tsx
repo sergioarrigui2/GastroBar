@@ -3,24 +3,8 @@
 import { ImagePlus, Loader2, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/primitives';
+import { IMAGE_BUCKET, MAX_UPLOAD_BYTES, menuPhoto } from '@/lib/images/process';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
-
-const BUCKET = 'product-images';
-const MAX_SIDE = 1024;
-
-/** Reduce la imagen a máx. 1024 px por lado y la convierte a WebP (≈100 KB). */
-async function toWebp(file: File): Promise<Blob> {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-  return new Promise((resolve, reject) =>
-    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('No se pudo procesar la imagen'))), 'image/webp', 0.85),
-  );
-}
 
 export function ProductImageField({
   tenantId,
@@ -38,12 +22,12 @@ export function ProductImageField({
   const upload = async (file: File) => {
     setError(null);
     if (!file.type.startsWith('image/')) return setError('El archivo debe ser una imagen');
-    if (file.size > 15 * 1024 * 1024) return setError('La imagen supera 15 MB');
+    if (file.size > MAX_UPLOAD_BYTES) return setError('La imagen supera 15 MB');
     setUploading(true);
     try {
-      const blob = await toWebp(file);
+      const blob = await menuPhoto(file);
       const path = `${tenantId}/${crypto.randomUUID()}.webp`;
-      const storage = getSupabaseBrowserClient().storage.from(BUCKET);
+      const storage = getSupabaseBrowserClient().storage.from(IMAGE_BUCKET);
       const { error: uploadError } = await storage.upload(path, blob, { contentType: 'image/webp', cacheControl: '31536000' });
       if (uploadError) throw uploadError;
       onChange(storage.getPublicUrl(path).data.publicUrl);
@@ -72,7 +56,7 @@ export function ProductImageField({
         )}
       </button>
       <div className="space-y-1 text-sm">
-        <p className="text-zinc-500">JPG, PNG o WebP. Se optimiza automáticamente.</p>
+        <p className="text-zinc-500">JPG, PNG o WebP. Se recorta en cuadrado y se optimiza automáticamente.</p>
         {value && (
           <Button variant="ghost" size="sm" className="text-red-600" onClick={() => onChange(null)}>
             <Trash2 className="size-4" /> Quitar imagen

@@ -432,7 +432,7 @@ type AiReportRow = {
 type AiUsageRow = {
   id: string;
   tenant_id: string;
-  feature: 'analyst_report' | 'purchase_agent' | 'analyst_chat';
+  feature: 'analyst_report' | 'purchase_agent' | 'analyst_chat' | 'menu_images';
   model: string;
   status: 'ok' | 'error';
   input_tokens: number;

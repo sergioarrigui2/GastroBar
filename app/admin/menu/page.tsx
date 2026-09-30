@@ -18,7 +18,7 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
         catalog={catalog}
         currency={ctx.tenant.currency}
         locale={ctx.tenant.locale}
-        initialTab={tab === 'categories' || tab === 'modifiers' || tab === 'sub-recipes' ? tab : 'products'}
+        initialTab={tab === 'categories' || tab === 'modifiers' || tab === 'sub-recipes' || tab === 'images' ? tab : 'products'}
         insights={menu.insights}
         openId={open}
       />

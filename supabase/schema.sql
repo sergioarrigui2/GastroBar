@@ -4554,3 +4554,11 @@ grant execute on function public.print_agent_pair(text, text) to anon, authentic
 grant execute on function public.print_agent_heartbeat(text, text, jsonb) to anon, authenticated;
 grant execute on function public.print_agent_pull(text, integer) to anon, authenticated;
 grant execute on function public.print_agent_report(text, uuid, boolean, text) to anon, authenticated;
+
+-- =============================================================================
+-- 31. RECONOCIMIENTO DE FOTOS DEL MENÚ CON IA (también en migrations/020_menu_images_ai.sql)
+-- =============================================================================
+
+alter table public.ai_usage drop constraint if exists ai_usage_feature_check;
+alter table public.ai_usage add constraint ai_usage_feature_check
+  check (feature in ('analyst_report', 'purchase_agent', 'analyst_chat', 'menu_images'));

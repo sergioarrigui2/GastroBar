@@ -3,7 +3,7 @@ import type { LanguageModelUsage } from 'ai';
 import type { TenantContext } from '@/lib/tenant-context';
 import { costUsd } from './pricing';
 
-export type AiFeature = 'analyst_report' | 'purchase_agent' | 'analyst_chat';
+export type AiFeature = 'analyst_report' | 'purchase_agent' | 'analyst_chat' | 'menu_images';
 
 export type UsageRecord = {
   feature: AiFeature;

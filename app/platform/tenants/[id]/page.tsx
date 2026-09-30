@@ -10,7 +10,7 @@ import { formatDateTime } from '@/lib/utils';
 
 export const metadata = { title: 'Cliente' };
 
-const FEATURE: Record<string, string> = { analyst_report: 'Informe del Analista', purchase_agent: 'Revisión del Comprador', analyst_chat: 'Chat' };
+const FEATURE: Record<string, string> = { analyst_report: 'Informe del Analista', purchase_agent: 'Revisión del Comprador', analyst_chat: 'Chat', menu_images: 'Fotos del menú' };
 const usd = (n: number, d = 4) => `USD ${n.toFixed(d)}`;
 
 export default async function TenantPage({ params }: { params: Promise<{ id: string }> }) {

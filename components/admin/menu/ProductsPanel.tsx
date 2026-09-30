@@ -58,6 +58,7 @@ export function ProductsPanel({
   const { pending, flash, run } = useAdminMutation();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [onlyNoImage, setOnlyNoImage] = useState(false);
   const [editing, setEditing] = useState<Product | 'new' | null>(() => catalog.products.find((p) => p.id === openId) ?? null);
 
   const categories = useMemo(() => new Map(catalog.categories.map((c) => [c.id, c])), [catalog.categories]);
@@ -70,7 +71,12 @@ export function ProductsPanel({
   const rows = useMemo(() => {
     const term = search.trim().toLowerCase();
     return catalog.products
-      .filter((p) => (categoryFilter === 'all' || p.category_id === categoryFilter) && (!term || p.name.toLowerCase().includes(term)))
+      .filter(
+        (p) =>
+          (categoryFilter === 'all' || p.category_id === categoryFilter) &&
+          (!term || p.name.toLowerCase().includes(term)) &&
+          (!onlyNoImage || !p.image_url),
+      )
       .map((p) => ({
         product: p,
         costing: costProduct(
@@ -81,7 +87,7 @@ export function ProductsPanel({
         ),
         lines: recipesByProduct.get(p.id)?.length ?? 0,
       }));
-  }, [catalog.products, categoryFilter, search, recipesByProduct, ingredientMap, subRecipeMap, lookups.tax]);
+  }, [catalog.products, categoryFilter, search, onlyNoImage, recipesByProduct, ingredientMap, subRecipeMap, lookups.tax]);
 
   if (catalog.categories.length === 0) {
     return (
@@ -106,6 +112,10 @@ export function ProductsPanel({
             </option>
           ))}
         </Select>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" className="size-5 accent-brand-500" checked={onlyNoImage} onChange={(e) => setOnlyNoImage(e.target.checked)} />
+          Sin imagen ({catalog.products.filter((p) => !p.image_url).length})
+        </label>
         <Button onClick={() => setEditing('new')}>
           <Plus className="size-4" /> Nuevo producto
         </Button>

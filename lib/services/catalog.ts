@@ -104,12 +104,21 @@ export async function setProductImage(ctx: TenantContext, productId: string, ima
       throw new Error('La imagen debe estar en la carpeta del gastrobar');
     }
   }
+  const { data: before } = await ctx.supabase.from('products').select('image_url').eq('tenant_id', ctx.tenant.id).eq('id', productId).maybeSingle();
   const { error } = await ctx.supabase
     .from('products')
     .update({ image_url: imageUrl })
     .eq('tenant_id', ctx.tenant.id)
     .eq('id', productId);
   if (error) throw error;
+  // La foto anterior ya no la usa nadie: se borra del almacenamiento (sólo si es de este gastrobar).
+  const marker = `/storage/v1/object/public/product-images/`;
+  const old = before?.image_url;
+  if (old && old !== imageUrl && old.includes(`${marker}${ctx.tenant.id}/`)) {
+    const path = decodeURIComponent(new URL(old).pathname.split(marker)[1] ?? '');
+    const { data: stillUsed } = await ctx.supabase.from('products').select('id').eq('tenant_id', ctx.tenant.id).eq('image_url', old).limit(1);
+    if (path && !stillUsed?.length) await ctx.supabase.storage.from('product-images').remove([path]);
+  }
 }
 
 export async function setProductActive(ctx: TenantContext, productId: string, isActive: boolean) {
