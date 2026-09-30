@@ -113,6 +113,7 @@ async function seedTenant(n: number, slug: string): Promise<Tenant> {
   await rows(A, `insert into ai_usage (feature, model, cost_usd) values ('analyst_report', 'm', 0.02)`);
   await superuser(`insert into public.tenant_ai_plans (tenant_id, plan) values ($1, 'pro')`, [id]);
   await rows(A, `insert into terminal_devices (name, token_hash) values ('Tablet salón', 'th_${slug}')`);
+  await rows(A, `insert into order_submissions (client_id, result) values (gen_random_uuid(), '{}')`);
   await superuser(`insert into public.staff_pins (profile_id, tenant_id, pin_hash) values ($1, $2, 'scrypt$1$x$y')`, [users.waiter, id]);
   await superuser(`insert into public.tenant_agents (tenant_id, agent, enabled) values ($1, 'vigia', true), ($1, 'comprador', true)`, [id]);
 

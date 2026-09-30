@@ -102,7 +102,7 @@ export function KDSDisplay({
     subscriptions: [{ table: 'order_items', filter: `station=eq.${station}` }],
     onRefresh: () => void refresh(),
     debounceMs: 200,
-    fallbackPollMs: 30_000,
+    fallbackPollMs: 10_000,
   });
 
   useEffect(() => {

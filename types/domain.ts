@@ -33,6 +33,8 @@ export type SubmitOrderResult = {
   status: OrderStatus;
   total: number;
   table_id: string | null;
+  /** true si era un reintento de una comanda que ya había entrado (no se duplicó). */
+  duplicate?: boolean;
 };
 
 /** Resultado de la RPC register_payments. */

@@ -19,6 +19,7 @@ export const submitOrderSchema = z.object({
   items: z.array(orderItemInputSchema).min(1).max(50),
   notes: z.string().trim().max(500).optional().describe('Nota general de la comanda'),
   guests: z.int().min(1).max(50).optional().describe('Número de comensales'),
+  client_id: z.uuid().optional().describe('Id único del envío: reintentarlo no duplica la comanda'),
 });
 
 export const updateItemsStatusSchema = z.object({

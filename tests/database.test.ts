@@ -815,3 +815,29 @@ describe('cambio de mesa, unión y separación de cuentas', () => {
     await assert.rejects(as(WAITER_A, `select public.transfer_order_items($1::uuid[], $2)`, [[paidItem!.id], m7]), /item_already_paid/);
   });
 });
+
+describe('comandas sin conexión', () => {
+  test('reintentar un envío con el mismo client_id no duplica la comanda', async () => {
+    const t10 = (await one<{ id: string }>(ADMIN_A, `insert into tables (zone_id, label) values ($1, 'T10') returning id`, [ids.zone])).id;
+    const agua = (await one<{ id: string }>(ADMIN_A, `insert into products (category_id, name, price, track_stock) values ($1, 'Agua cola', 4000, false) returning id`, [ids.bar])).id;
+    const clientId = crypto.randomUUID();
+    const send = () =>
+      one<{ r: { order_id: string; round: number; duplicate?: boolean } }>(WAITER_A, `select public.submit_order($1, $2::jsonb, null, null, $3) as r`, [
+        t10,
+        JSON.stringify([{ product_id: agua, quantity: 2 }]),
+        clientId,
+      ]).then((x) => x.r);
+    const first = await send();
+    const retry = await send();
+    assert.equal(retry.order_id, first.order_id);
+    assert.equal(retry.duplicate, true);
+    const [c] = await as<{ n: number }>(ADMIN_A, `select count(*)::int as n from order_items where order_id = $1`, [first.order_id]);
+    assert.equal(c!.n, 1, 'sigue habiendo una sola línea');
+    // Otro envío (otro client_id) sí agrega una ronda.
+    const next = await submit(WAITER_A, [{ product_id: agua }], t10);
+    assert.equal(next.round, 2);
+    // Otro gastrobar no ve los envíos de A.
+    const [b] = await as<{ n: number }>(ADMIN_B, `select count(*)::int as n from order_submissions`);
+    assert.equal(b!.n, 0);
+  });
+});

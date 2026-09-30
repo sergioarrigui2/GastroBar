@@ -529,6 +529,7 @@ export type Database = {
       inventory_movements: Table<InventoryMovementRow, 'ingredient_id' | 'movement_type' | 'quantity'>;
       api_keys: Table<ApiKeyRow, 'profile_id' | 'name' | 'key_prefix' | 'key_hash'>;
       terminal_devices: Table<TerminalDeviceRow, 'name' | 'token_hash'>;
+      order_submissions: Table<{ client_id: string; tenant_id: string; result: Json; created_by: string | null; created_at: string }, 'client_id' | 'result'>;
       staff_pins: Table<StaffPinRow, 'profile_id' | 'tenant_id' | 'pin_hash'>;
       cash_sessions: Table<CashSessionRow, never>;
       cash_movements: Table<CashMovementRow, 'session_id' | 'movement_type' | 'amount' | 'reason'>;
@@ -554,7 +555,7 @@ export type Database = {
         Returns: string;
       };
       submit_order: {
-        Args: { p_table_id: string | null; p_items: Json; p_notes?: string | null; p_guests?: number | null };
+        Args: { p_table_id: string | null; p_items: Json; p_notes?: string | null; p_guests?: number | null; p_client_id?: string | null };
         Returns: Json;
       };
       register_payments: {

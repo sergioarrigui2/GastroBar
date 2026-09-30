@@ -85,11 +85,13 @@ export function useRealtimeRefresh({
       if (document.visibilityState === 'visible') schedule();
     };
     document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('online', schedule);
 
     return () => {
       clearTimeout(timer);
       clearInterval(poll);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('online', schedule);
       void supabase.removeChannel(ch);
     };
   }, [channel, subsKey, debounceMs, fallbackPollMs]);

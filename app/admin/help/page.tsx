@@ -367,6 +367,7 @@ export default async function HelpPage() {
             ['El menú QR dice que no existe', 'Activa el menú público en Ajustes.'],
             ['Un empleado no puede entrar', 'Revisa que esté activo en Personal. Si olvidó el PIN o quedó bloqueado, asígnale uno nuevo con "Cambiar PIN"; si usa correo, que use "¿Olvidaste tu contraseña?".'],
             ['Un empleado no aparece en la tablet', 'Necesita un PIN asignado y estar activo. El PIN sólo funciona en tablets autorizadas en Personal.'],
+            ['Se cayó el internet', 'Las comandas se guardan en el celular (aviso rojo arriba) y se envían solas al volver; no se duplican. Cobrar y cocina necesitan conexión: ten a mano un plan de datos o un celular como punto de acceso.'],
             ['El recibo no trae número de factura', 'La facturación está apagada o el documento sigue en proceso; revisa Facturación.'],
           ]}
         />

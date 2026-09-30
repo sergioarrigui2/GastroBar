@@ -60,6 +60,7 @@ export function CashRegister({
     subscriptions: [{ table: 'payments', filter: `tenant_id=eq.${tenant.id}` }],
     onRefresh: () => router.refresh(),
     debounceMs: 1000,
+    fallbackPollMs: 10_000,
   });
 
   const [viewing, setViewing] = useState<TableBill | null>(null);

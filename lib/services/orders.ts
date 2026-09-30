@@ -27,6 +27,7 @@ export async function submitOrder(ctx: TenantContext, input: SubmitOrderInput): 
     p_items: data.items as unknown as Json,
     p_notes: data.notes ?? null,
     p_guests: data.guests ?? null,
+    p_client_id: data.client_id ?? null,
   });
   if (error) throw error;
   return result as unknown as SubmitOrderResult;

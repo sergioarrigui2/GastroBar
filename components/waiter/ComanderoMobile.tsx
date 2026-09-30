@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import {
   cancelOrderAction,
   cancelOrderItemsAction,
@@ -43,6 +43,7 @@ import { DiscountSheet } from '@/components/billing/DiscountSheet';
 import { PaymentsList } from '@/components/billing/PaymentsList';
 import { SplitBillModal } from '@/components/billing/SplitBillModal';
 import { TransferSheet } from '@/components/waiter/TransferSheet';
+import { useOrderOutbox } from '@/components/waiter/useOrderOutbox';
 import { Badge, Button, Stepper } from '@/components/ui/primitives';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useRealtimeRefresh } from '@/components/ui/useRealtimeRefresh';
@@ -109,6 +110,28 @@ export function ComanderoMobile({
   const [search, setSearch] = useState('');
   const [carts, setCarts] = useState<Record<string, CartLine[]>>({});
   const [orderNotes, setOrderNotes] = useState('');
+  // Los carritos sin enviar sobreviven a una recarga o a quedarse sin batería (por gastrobar).
+  const cartsKey = `gastrobar:carts:${tenant.id}`;
+  const cartsLoaded = useRef(false);
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(cartsKey);
+      if (saved) setCarts(JSON.parse(saved) as Record<string, CartLine[]>);
+    } catch {
+      // sin almacenamiento local: sólo en memoria
+    }
+    cartsLoaded.current = true;
+  }, [cartsKey]);
+  useEffect(() => {
+    if (!cartsLoaded.current) return;
+    try {
+      const pending = Object.fromEntries(Object.entries(carts).filter(([, lines]) => lines.length > 0));
+      if (Object.keys(pending).length) localStorage.setItem(cartsKey, JSON.stringify(pending));
+      else localStorage.removeItem(cartsKey);
+    } catch {
+      // sin almacenamiento local
+    }
+  }, [carts, cartsKey]);
   const [guests, setGuests] = useState(2);
   const [sheet, setSheet] = useState<{ product: MenuProduct; editKey?: string } | null>(null);
   const [bill, setBill] = useState<TableBill | null>(null);
@@ -137,6 +160,11 @@ export function ComanderoMobile({
     const t = setTimeout(() => setToast(null), 2600);
     return () => clearTimeout(t);
   }, [toast]);
+
+  const outbox = useOrderOutbox(tenant.id, (entry) => {
+    notify(`Comanda pendiente de Mesa ${entry.table_label} enviada`);
+    router.refresh();
+  });
 
   const loadBill = useCallback(async (id: string) => {
     setBillLoading(true);
@@ -186,6 +214,7 @@ export function ComanderoMobile({
       if (tableId && tab === 'bill') void loadBill(tableId);
     },
     debounceMs: 400,
+    fallbackPollMs: 10_000,
   });
 
   // ── Navegación ──
@@ -245,18 +274,33 @@ export function ComanderoMobile({
 
   const sendOrder = () => {
     if (!tableId || cart.length === 0) return;
+    const input = {
+      table_id: tableId,
+      items: cart.map((l) => ({
+        product_id: l.product.product_id,
+        quantity: l.quantity,
+        modifier_ids: l.modifiers.map((m) => m.id),
+        notes: l.notes || undefined,
+      })),
+      notes: orderNotes.trim() || undefined,
+      guests: table?.open_order ? undefined : guests,
+      client_id: crypto.randomUUID(),
+    };
+    // Sin internet: la comanda queda en cola en este dispositivo y se envía sola al volver.
+    const queue = () => {
+      outbox.enqueue({ client_id: input.client_id, table_label: table?.label ?? '', input, created_at: new Date().toISOString() });
+      setCarts((prev) => ({ ...prev, [tableId]: [] }));
+      setOrderNotes('');
+      notify('Sin conexión: la comanda quedó en cola y se enviará sola al volver el internet', 'error');
+    };
+    if (!navigator.onLine) return queue();
     startTransition(async () => {
-      const result = await submitOrderAction({
-        table_id: tableId,
-        items: cart.map((l) => ({
-          product_id: l.product.product_id,
-          quantity: l.quantity,
-          modifier_ids: l.modifiers.map((m) => m.id),
-          notes: l.notes || undefined,
-        })),
-        notes: orderNotes.trim() || undefined,
-        guests: table?.open_order ? undefined : guests,
-      });
+      let result: Awaited<ReturnType<typeof submitOrderAction>>;
+      try {
+        result = await submitOrderAction(input);
+      } catch {
+        return queue();
+      }
       if (!result.ok) {
         notify(result.error, 'error');
         return;
@@ -342,6 +386,39 @@ export function ComanderoMobile({
               <span className="text-xs opacity-80">Ver</span>
             </button>
           ))}
+        </div>
+      )}
+
+      {(!outbox.online || outbox.entries.length > 0) && (
+        <div
+          role="status"
+          className={cn(
+            'px-4 py-2 text-sm font-semibold',
+            outbox.online ? 'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-100' : 'bg-red-600 text-white',
+          )}
+        >
+          <p>
+            {!outbox.online
+              ? `Sin internet. Las comandas se guardan aquí y se envían solas al volver${outbox.entries.length ? ` · ${outbox.entries.length} en cola` : ''}.`
+              : outbox.flushing
+                ? `Enviando ${outbox.entries.length} comanda(s) pendiente(s)…`
+                : `${outbox.entries.length} comanda(s) pendiente(s) de envío`}
+          </p>
+          {outbox.entries
+            .filter((e) => e.error)
+            .map((e) => (
+              <div key={e.client_id} className="mt-1 flex flex-wrap items-center gap-2 font-normal">
+                <span className="flex-1">
+                  Mesa {e.table_label}: {e.error}
+                </span>
+                <button type="button" className="rounded-lg bg-white/70 px-2 py-0.5 text-xs font-semibold text-zinc-900" onClick={() => outbox.retry(e.client_id)}>
+                  Reintentar
+                </button>
+                <button type="button" className="rounded-lg px-2 py-0.5 text-xs underline" onClick={() => outbox.discard(e.client_id)}>
+                  Descartar
+                </button>
+              </div>
+            ))}
         </div>
       )}
 
