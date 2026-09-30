@@ -331,6 +331,35 @@ type PrintJobRow = {
   printed_at: string | null;
 };
 
+type OAuthClientRow = { client_id: string; client_secret_hash: string | null; client_name: string; redirect_uris: string[]; created_at: string };
+type OAuthCodeRow = {
+  code_hash: string;
+  client_id: string;
+  tenant_id: string;
+  granted_by: string;
+  redirect_uri: string;
+  code_challenge: string;
+  scopes: string[];
+  resource: string | null;
+  expires_at: string;
+  used_at: string | null;
+  created_at: string;
+};
+type AiConnectionRow = {
+  id: string;
+  tenant_id: string;
+  client_id: string | null;
+  client_name: string;
+  agent_profile_id: string;
+  granted_by: string | null;
+  scopes: string[];
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+};
+type AiConnectionTokenRow = { token_hash: string; connection_id: string; kind: 'access' | 'refresh'; expires_at: string; revoked_at: string | null; created_at: string };
+type AiConnectionCallRow = { id: string; tenant_id: string; connection_id: string; tool: string; ok: boolean; created_at: string };
+
 type ApiKeyRow = {
   id: string;
   tenant_id: string;
@@ -589,6 +618,11 @@ export type Database = {
       printers: Table<PrinterRow, 'station_id' | 'name' | 'connection' | 'target'>;
       print_settings: Table<PrintSettingsRow, never>;
       print_jobs: Table<PrintJobRow, 'printer_id' | 'document' | 'title' | 'payload'>;
+      oauth_clients: Table<OAuthClientRow, 'client_id' | 'redirect_uris'>;
+      oauth_codes: Table<OAuthCodeRow, 'code_hash' | 'client_id' | 'tenant_id' | 'granted_by' | 'redirect_uri' | 'code_challenge' | 'scopes' | 'expires_at'>;
+      ai_connections: Table<AiConnectionRow, 'tenant_id' | 'client_name' | 'agent_profile_id' | 'scopes'>;
+      ai_connection_tokens: Table<AiConnectionTokenRow, 'token_hash' | 'connection_id' | 'kind' | 'expires_at'>;
+      ai_connection_calls: Table<AiConnectionCallRow, 'tenant_id' | 'connection_id' | 'tool' | 'ok'>;
       order_submissions: Table<{ client_id: string; tenant_id: string; result: Json; created_by: string | null; created_at: string }, 'client_id' | 'result'>;
       staff_pins: Table<StaffPinRow, 'profile_id' | 'tenant_id' | 'pin_hash'>;
       cash_sessions: Table<CashSessionRow, never>;

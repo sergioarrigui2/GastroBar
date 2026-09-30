@@ -6,7 +6,14 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { toUserMessage } from '@/lib/errors';
 import { hashPin, isPinRole, lockAfterFailure, minutesLeft, pinProblem, verifyPin } from '@/lib/staff/pin';
-import { generateTerminalToken, getTerminal, TERMINAL_COOKIE, TERMINAL_COOKIE_MAX_AGE } from '@/lib/staff/terminal';
+import {
+  generateTerminalToken,
+  getTerminal,
+  PIN_SESSION_COOKIE,
+  PIN_SESSION_MAX_AGE,
+  TERMINAL_COOKIE,
+  TERMINAL_COOKIE_MAX_AGE,
+} from '@/lib/staff/terminal';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { assertRole, getTenantContext, HOME_BY_ROLE } from '@/lib/tenant-context';
@@ -73,6 +80,13 @@ export async function signInWithPinAction(_prev: PinState, formData: FormData): 
   await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
   const { error: verifyError } = await supabase.auth.verifyOtp({ token_hash: link.properties.hashed_token, type: 'magiclink' });
   if (verifyError) return { error: 'No se pudo abrir la sesión. Intenta de nuevo.' };
+  (await cookies()).set(PIN_SESSION_COOKIE, '1', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: PIN_SESSION_MAX_AGE,
+  });
 
   redirect(HOME_BY_ROLE[profile.role]);
 }
@@ -81,6 +95,7 @@ export async function signInWithPinAction(_prev: PinState, formData: FormData): 
 export async function lockTerminalAction(): Promise<void> {
   const supabase = await createSupabaseServerClient();
   await supabase.auth.signOut({ scope: 'local' });
+  (await cookies()).delete(PIN_SESSION_COOKIE);
   redirect('/terminal');
 }
 

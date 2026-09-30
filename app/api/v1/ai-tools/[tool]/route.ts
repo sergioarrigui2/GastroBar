@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { executeAiTool } from '@/lib/ai-tools';
+import { recordCall, underRateLimit } from '@/lib/oauth/server';
 import { toUserMessage } from '@/lib/errors';
 import { getTenantContextFromRequest, TenantContextError } from '@/lib/tenant-context';
 
@@ -36,7 +37,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ too
 
   try {
     const ctx = await getTenantContextFromRequest(request);
+    const conn = ctx.connection ? { tenantId: ctx.tenant.id, connectionId: ctx.connection.id } : null;
+    if (conn && !(await underRateLimit(conn.connectionId))) {
+      return NextResponse.json(
+        { ok: false, tool, error: { code: 'forbidden', message: 'Límite de consultas por hora alcanzado para esta conexión' } },
+        { status: 429 },
+      );
+    }
     const result = await executeAiTool(tool, input, ctx);
+    if (conn) await recordCall(conn, tool, result.ok);
     return NextResponse.json(result, { status: result.ok ? 200 : STATUS_BY_ERROR[result.error.code] });
   } catch (error) {
     const status = error instanceof TenantContextError ? error.status : 500;

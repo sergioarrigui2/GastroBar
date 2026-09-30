@@ -118,6 +118,10 @@ async function seedTenant(n: number, slug: string): Promise<Tenant> {
   const printer = (await first<{ id: string }>(A, `insert into printers (station_id, name, connection, target) values ($1, 'Cocina', 'network', '10.0.0.5') returning id`, [station])).id;
   await rows(A, `insert into print_settings (routes) values (jsonb_build_object('kitchen_order', $1::text))`, [printer]);
   await rows(users.waiter, `insert into print_jobs (printer_id, document, title, payload) values ($1, 'kitchen_order', 'Comanda', '{"blocks":[]}')`, [printer]);
+  await superuser(`insert into public.oauth_clients (client_id, redirect_uris) values ('cli-${slug}', '{https://claude.ai/api/mcp/auth_callback}')`);
+  await superuser(`insert into public.oauth_codes (code_hash, client_id, tenant_id, granted_by, redirect_uri, code_challenge, scopes, expires_at) values ('code-${slug}', 'cli-${slug}', $1, $2, 'https://claude.ai/api/mcp/auth_callback', 'x', '{gastrobar.read}', now())`, [id, users.admin]);
+  const conn = (await superuser<{ id: string }>(`insert into public.ai_connections (tenant_id, client_id, client_name, agent_profile_id, granted_by, scopes) values ($1, 'cli-${slug}', 'Claude', $2, $3, '{gastrobar.read}') returning id`, [id, users.ai_agent, users.admin]))[0]!.id;
+  await superuser(`insert into public.ai_connection_calls (tenant_id, connection_id, tool, ok) values ($1, $2, 'get_table_status', true)`, [id, conn]);
   await superuser(`insert into public.staff_pins (profile_id, tenant_id, pin_hash) values ($1, $2, 'scrypt$1$x$y')`, [users.waiter, id]);
   await superuser(`insert into public.tenant_agents (tenant_id, agent, enabled) values ($1, 'vigia', true), ($1, 'comprador', true)`, [id]);
 

@@ -2,7 +2,10 @@ import 'server-only';
 
 import { redirect } from 'next/navigation';
 import { cache } from 'react';
+import { accessTokenForUser } from '@/lib/agent-session';
 import { accessTokenForApiKey, isApiKey } from '@/lib/api-keys';
+import { ACCESS_PREFIX } from '@/lib/oauth/core';
+import { resolveAccessToken } from '@/lib/oauth/server';
 import {
   createSupabaseServerClient,
   createSupabaseTokenClient,
@@ -22,6 +25,8 @@ export type TenantContext = {
   role: AppRole;
   profile: Profile;
   tenant: Tenant;
+  /** Presente cuando la petición viene de un asistente conectado (Claude, ChatGPT…): permisos limitados. */
+  connection?: { id: string; scopes: string[] };
 };
 
 export class TenantContextError extends Error {
@@ -83,6 +88,15 @@ export async function getTenantContextFromRequest(request: Request): Promise<Ten
     const accessToken = await accessTokenForApiKey(token);
     if (!accessToken) throw new TenantContextError('Clave API inválida o revocada', 401, 'unauthenticated');
     token = accessToken;
+  } else if (token.startsWith(ACCESS_PREFIX)) {
+    // Asistente conectado por OAuth: actúa como el agente de su conexión.
+    const conn = await resolveAccessToken(token);
+    if (!conn) throw new TenantContextError('Conexión vencida o desconectada', 401, 'unauthenticated');
+    const accessToken = await accessTokenForUser(conn.agentUserId);
+    if (!accessToken) throw new TenantContextError('Conexión vencida o desconectada', 401, 'unauthenticated');
+    const ctx = await resolveTenantContext(createSupabaseTokenClient(accessToken), accessToken);
+    if (ctx.tenant.id !== conn.tenantId) throw new TenantContextError('Conexión inválida', 403, 'forbidden');
+    return { ...ctx, connection: { id: conn.connectionId, scopes: conn.scopes } };
   }
   return resolveTenantContext(createSupabaseTokenClient(token), token);
 }

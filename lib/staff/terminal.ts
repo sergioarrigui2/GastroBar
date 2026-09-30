@@ -62,9 +62,22 @@ export async function getTerminal(): Promise<Terminal | null> {
   return { id: device.id, name: device.name, tenantId: device.tenant_id, tenantName: tenant.name };
 }
 
-/** ¿Este dispositivo tiene cookie de terminal? (sin validar; para decidir a dónde volver al salir). */
+/** ¿Este dispositivo tiene cookie de terminal? (sin validar). */
 export async function hasTerminalCookie(): Promise<boolean> {
   return (await cookies()).has(TERMINAL_COOKIE);
+}
+
+/**
+ * La sesión actual se abrió con PIN en esta terminal (no con correo). Sólo esas
+ * sesiones se bloquean por inactividad y vuelven a la pantalla de PIN al salir;
+ * quien entra con correo vuelve al login aunque esté en una tablet autorizada.
+ */
+export const PIN_SESSION_COOKIE = 'gb_pin_session';
+export const PIN_SESSION_MAX_AGE = 60 * 60 * 24 * 30;
+
+export async function isPinSession(): Promise<boolean> {
+  const jar = await cookies();
+  return jar.has(TERMINAL_COOKIE) && jar.get(PIN_SESSION_COOKIE)?.value === '1';
 }
 
 export type TerminalStaff = { id: string; name: string; role: AppRole };

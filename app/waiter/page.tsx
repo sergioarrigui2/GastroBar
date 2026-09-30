@@ -1,7 +1,7 @@
 import { ComanderoMobile } from '@/components/waiter/ComanderoMobile';
 import { TerminalIdleLock } from '@/components/terminal/TerminalIdleLock';
 import { getMenu } from '@/lib/services/menu';
-import { hasTerminalCookie } from '@/lib/staff/terminal';
+import { isPinSession } from '@/lib/staff/terminal';
 import { getTableStatus } from '@/lib/services/tables';
 import { requirePageRole } from '@/lib/tenant-context';
 
@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function WaiterPage() {
   const ctx = await requirePageRole(['admin', 'cashier', 'waiter']);
-  const [snapshot, menu, terminal] = await Promise.all([getTableStatus(ctx), getMenu(ctx), hasTerminalCookie()]);
+  const [snapshot, menu, terminal] = await Promise.all([getTableStatus(ctx), getMenu(ctx), isPinSession()]);
 
   return (
     <>

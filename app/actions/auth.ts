@@ -1,9 +1,9 @@
 'use server';
 
-import { headers } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
-import { hasTerminalCookie } from '@/lib/staff/terminal';
+import { hasTerminalCookie, isPinSession, PIN_SESSION_COOKIE } from '@/lib/staff/terminal';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { loginSchema, signUpSchema } from '@/lib/validations/admin';
 
@@ -23,6 +23,7 @@ export async function signInAction(_prev: AuthFormState, formData: FormData): Pr
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
   if (error) return { error: 'Credenciales incorrectas' };
+  (await cookies()).delete(PIN_SESSION_COOKIE); // sesión con correo: sin bloqueo ni pantalla de PIN
 
   redirect(safeNext(str(formData, 'next')));
 }
@@ -61,10 +62,15 @@ export async function updatePasswordAction(_prev: AuthFormState, formData: FormD
   redirect('/');
 }
 
-/** En una terminal compartida, salir sólo cierra esta sesión y vuelve a la pantalla de PIN. */
+/**
+ * Salir. Si la sesión se abrió con PIN en una terminal, vuelve a la pantalla de PIN;
+ * si se abrió con correo, al login (aunque sea en una tablet autorizada).
+ * En una terminal sólo se cierra la sesión de este dispositivo.
+ */
 export async function signOutAction(): Promise<void> {
   const supabase = await createSupabaseServerClient();
-  const terminal = await hasTerminalCookie();
+  const [pin, terminal] = await Promise.all([isPinSession(), hasTerminalCookie()]);
   await supabase.auth.signOut(terminal ? { scope: 'local' } : undefined);
-  redirect(terminal ? '/terminal' : '/login');
+  (await cookies()).delete(PIN_SESSION_COOKIE);
+  redirect(pin ? '/terminal' : '/login');
 }

@@ -9,8 +9,11 @@ import { createOrderTool } from './tools/create-order';
 import { getBarMetricsTool } from './tools/get-bar-metrics';
 import { getBusinessAnalysisTool } from './tools/get-business-analysis';
 import { getMenuAvailabilityTool } from './tools/get-menu-availability';
+import { getInventoryStatusTool } from './tools/get-inventory-status';
+import { getMenuCostsTool } from './tools/get-menu-costs';
 import { getTableStatusTool } from './tools/get-table-status';
 import { processSplitPaymentTool } from './tools/process-split-payment';
+import { fetchTool, searchTool } from './tools/search-fetch';
 import type { AiToolDefinition, AiToolResult } from './types';
 
 export type { AiToolDefinition, AiToolResult } from './types';
@@ -29,6 +32,10 @@ export const aiTools = {
   process_split_payment_tool: processSplitPaymentTool,
   get_bar_metrics_tool: getBarMetricsTool,
   get_business_analysis_tool: getBusinessAnalysisTool,
+  get_menu_costs: getMenuCostsTool,
+  get_inventory_status: getInventoryStatusTool,
+  search: searchTool,
+  fetch: fetchTool,
 } as const;
 
 export type AiToolName = keyof typeof aiTools;
@@ -42,8 +49,13 @@ export function isAiToolName(name: string): name is AiToolName {
   return Object.hasOwn(aiTools, name);
 }
 
-function toolsForRole(role: AppRole): AiToolDefinition[] {
-  return toolList.filter((t) => t.allowedRoles.includes(role));
+function toolsForRole(role: AppRole, readOnlyOnly = false): AiToolDefinition[] {
+  return toolList.filter((t) => t.allowedRoles.includes(role) && (!readOnlyOnly || t.readOnly));
+}
+
+/** Un asistente conectado por OAuth sólo tiene permiso de lectura: nunca ejecuta herramientas que escriben. */
+export function isReadOnlyContext(ctx: TenantContext): boolean {
+  return Boolean(ctx.connection) && !ctx.connection!.scopes.includes('gastrobar.write');
 }
 
 /**
@@ -56,6 +68,10 @@ export async function executeAiTool(name: string, rawInput: unknown, ctx: Tenant
     return { ok: false, tool: name, error: { code: 'unknown_tool', message: `Herramienta desconocida: ${name}` } };
   }
   const definition = aiTools[name] as unknown as AiToolDefinition;
+
+  if (isReadOnlyContext(ctx) && !definition.readOnly) {
+    return { ok: false, tool: name, error: { code: 'forbidden', message: 'Esta conexión es de sólo lectura' } };
+  }
 
   if (!definition.allowedRoles.includes(ctx.role)) {
     return {
@@ -95,8 +111,8 @@ export type McpToolDescriptor = {
   annotations: { title: string; readOnlyHint: boolean; destructiveHint: boolean; openWorldHint: boolean };
 };
 
-export function listAiTools(role?: AppRole): McpToolDescriptor[] {
-  return (role ? toolsForRole(role) : toolList).map((t) => ({
+export function listAiTools(role?: AppRole, readOnlyOnly = false): McpToolDescriptor[] {
+  return (role ? toolsForRole(role, readOnlyOnly) : toolList.filter((t) => !readOnlyOnly || t.readOnly)).map((t) => ({
     name: t.name,
     title: t.title,
     description: t.description,
@@ -119,7 +135,7 @@ export function listAiTools(role?: AppRole): McpToolDescriptor[] {
  */
 export function createVercelAiTools(ctx: TenantContext): Record<string, Tool> {
   const tools: Record<string, Tool> = {};
-  for (const definition of toolsForRole(ctx.role)) {
+  for (const definition of toolsForRole(ctx.role, isReadOnlyContext(ctx))) {
     tools[definition.name] = tool({
       description: definition.description,
       inputSchema: definition.inputSchema,

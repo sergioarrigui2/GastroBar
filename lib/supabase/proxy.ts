@@ -8,7 +8,8 @@ import type { Database } from '@/types/database';
 /** /api/cron valida su propio secreto (CRON_SECRET). */
 /** /terminal es la pantalla de PIN de las tablets compartidas (valida su propia cookie). */
 /** /api/print y /descargas: el programa GastroBar Print (se autentica con su código / token). */
-const PUBLIC_PATHS = ['/login', '/onboarding', '/auth', '/api/v1', '/api/cron', '/api/print', '/descargas', '/m', '/terminal'];
+/** /.well-known y /api/oauth: descubrimiento e inicio de sesión de asistentes de IA (OAuth). */
+const PUBLIC_PATHS = ['/login', '/onboarding', '/auth', '/api/v1', '/api/cron', '/api/print', '/api/oauth', '/.well-known', '/descargas', '/m', '/terminal'];
 
 /** Refresca la sesión de Supabase en cada request y protege las rutas privadas. */
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
@@ -47,7 +48,8 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     url.search = '';
-    url.searchParams.set('next', pathname);
+    // Se conserva la consulta: /oauth/authorize trae los parámetros del asistente.
+    url.searchParams.set('next', pathname + request.nextUrl.search);
     return NextResponse.redirect(url);
   }
 

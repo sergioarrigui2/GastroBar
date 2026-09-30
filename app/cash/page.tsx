@@ -3,7 +3,7 @@ import { CashRegister } from '@/components/cash/CashRegister';
 import { TerminalIdleLock } from '@/components/terminal/TerminalIdleLock';
 import { getCashNotices } from '@/lib/services/agent-notices';
 import { getCashSession, listCashSessions, profileNames } from '@/lib/services/cash';
-import { hasTerminalCookie } from '@/lib/staff/terminal';
+import { isPinSession } from '@/lib/staff/terminal';
 import { requirePageRole } from '@/lib/tenant-context';
 
 export const metadata = { title: 'Caja' };
@@ -16,7 +16,7 @@ export default async function CashPage() {
     listCashSessions(ctx),
     profileNames(ctx),
     getCashNotices(ctx),
-    hasTerminalCookie(),
+    isPinSession(),
   ]);
 
   const paidOrders = session

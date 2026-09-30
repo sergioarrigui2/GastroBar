@@ -14,6 +14,9 @@ const createKeySchema = z.object({
 export async function createApiKeyAction(input: z.input<typeof createKeySchema>) {
   const result = await runAction(['admin'], async (ctx) => {
     const data = createKeySchema.parse(input);
+    // El agente de una conexión de IA (sólo lectura) nunca recibe una clave API (acceso completo).
+    const { data: linked } = await ctx.supabase.from('ai_connections').select('id').eq('tenant_id', ctx.tenant.id).eq('agent_profile_id', data.profile_id).limit(1);
+    if (linked?.length) throw new Error('Ese agente pertenece a una conexión de IA y no puede tener clave API');
     const { key, prefix, hash } = generateApiKey();
     const { error } = await ctx.supabase.from('api_keys').insert({
       profile_id: data.profile_id,
