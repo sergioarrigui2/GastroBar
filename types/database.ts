@@ -179,6 +179,8 @@ type OrderRow = {
   created_at: string;
   updated_at: string;
   closed_at: string | null;
+  cancel_reason: string | null;
+  cancelled_by: string | null;
 };
 
 type OrderItemRow = {
@@ -209,6 +211,8 @@ type OrderItemRow = {
   ready_at: string | null;
   delivered_at: string | null;
   cancelled_at: string | null;
+  cancel_reason: string | null;
+  cancelled_by: string | null;
 };
 
 type PaymentRow = {
@@ -557,6 +561,10 @@ export type Database = {
         Args: { p_order_id: string; p_split_type: SplitType; p_payments: Json };
         Returns: Json;
       };
+      change_ingredient_unit: {
+        Args: { p_ingredient_id: string; p_unit: MeasureUnit; p_factor: number };
+        Returns: IngredientRow;
+      };
       record_inventory_movement: {
         Args: {
           p_ingredient_id: string;
@@ -602,6 +610,10 @@ export type Database = {
       retry_einvoice_document: { Args: { p_document_id: string }; Returns: undefined };
       enqueue_missing_einvoices: { Args: { p_since?: string }; Returns: number };
       void_payment: { Args: { p_payment_id: string; p_reason: string }; Returns: Json };
+      transfer_order: { Args: { p_order_id: string; p_table_id: string }; Returns: Json };
+      transfer_order_items: { Args: { p_item_ids: string[]; p_table_id: string }; Returns: Json };
+      cancel_order_items: { Args: { p_item_ids: string[]; p_reason: string }; Returns: number };
+      cancel_order: { Args: { p_order_id: string; p_reason: string }; Returns: undefined };
       get_shift_metrics: {
         Args: { p_from?: string; p_to?: string };
         Returns: Json;

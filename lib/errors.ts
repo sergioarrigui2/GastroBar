@@ -38,6 +38,10 @@ const DB_ERROR_MESSAGES: Record<string, string> = {
   payment_in_closed_cash_session: 'El pago pertenece a una caja ya cerrada y no se puede anular',
   einvoice_disabled: 'La facturación electrónica está desactivada',
   einvoice_not_retryable: 'Sólo se pueden reintentar documentos con error o rechazados',
+  same_table: 'La cuenta ya está en esa mesa',
+  order_has_discount: 'Quita el descuento de la cuenta antes de unirla con otra',
+  order_has_einvoice: 'Esta cuenta ya tiene facturación electrónica; cóbrala por separado',
+  items_from_several_orders: 'Selecciona productos de una sola cuenta',
   api_key_requires_ai_agent: 'Las claves API sólo pueden asignarse a usuarios con rol Agente IA',
 };
 

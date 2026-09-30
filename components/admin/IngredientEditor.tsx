@@ -3,12 +3,13 @@
 import { ExternalLink, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { deleteEntityAction, getIngredientUsageAction, saveIngredientAction } from '@/app/actions/catalog';
+import { changeIngredientUnitAction, deleteEntityAction, getIngredientUsageAction, saveIngredientAction } from '@/app/actions/catalog';
 import type { IngredientUsage } from '@/lib/services/catalog';
 import { Button, Input, Label, Select } from '@/components/ui/primitives';
 import { Sheet } from '@/components/ui/Sheet';
 import type { MeasureUnit } from '@/types/database';
 import type { Ingredient } from '@/types/domain';
+import { formatQuantity } from '@/lib/utils';
 import { FlashMessage, toNumber, useAdminMutation } from './useAdminMutation';
 
 /** El costo se captura por kg / L / unidad (como se compra) y se guarda por g / ml / unidad. */
@@ -114,7 +115,7 @@ export function IngredientEditor({
             <option value="g">Gramos (g)</option>
             <option value="unit">Unidades</option>
           </Select>
-          {ingredient && <p className="mt-1 text-xs text-zinc-500">La unidad no se cambia para no alterar recetas ni stock.</p>}
+          {ingredient && <UnitChanger ingredient={ingredient} usedIn={usedIn} currency={currency} locale={locale} onDone={onClose} />}
         </div>
         <div>
           <Label htmlFor="i-cost">
@@ -186,5 +187,106 @@ export function IngredientEditor({
       )}
       <FlashMessage flash={flash} />
     </Sheet>
+  );
+}
+
+const UNIT_NAME: Record<MeasureUnit, string> = { g: 'gramos', ml: 'mililitros', unit: 'unidades' };
+const UNIT_SHORT: Record<MeasureUnit, string> = { g: 'g', ml: 'ml', unit: 'u' };
+
+/**
+ * Cambio de unidad con conversión: se pide cuánto trae 1 unidad (botella, paquete) y
+ * se convierten stock, mínimo, costo, empaque, recetas e historial en un solo paso.
+ */
+function UnitChanger({
+  ingredient,
+  usedIn,
+  currency,
+  locale,
+  onDone,
+}: {
+  ingredient: Ingredient;
+  usedIn: number;
+  currency: string;
+  locale: string;
+  onDone: () => void;
+}) {
+  const { pending, flash, run } = useAdminMutation();
+  const [open, setOpen] = useState(false);
+  const from = ingredient.unit;
+  const options = (['unit', 'ml', 'g'] as MeasureUnit[]).filter((u) => u !== from);
+  const [to, setTo] = useState<MeasureUnit>(options[0]!);
+  const [amount, setAmount] = useState(from === 'unit' || to === 'unit' ? '' : '1');
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="mt-1 text-xs font-semibold text-brand-600 hover:underline">
+        ¿Se creó con la unidad equivocada? Cambiar unidad
+      </button>
+    );
+  }
+
+  const measure = from === 'unit' ? to : from; // g o ml (o el mismo par g↔ml)
+  const value = toNumber(amount || '0');
+  // factor = cuántas unidades actuales trae 1 unidad nueva
+  const factor = !(value > 0) ? 0 : to === 'unit' ? value : from === 'unit' ? 1 / value : value;
+  const question =
+    to === 'unit'
+      ? `¿Cuántos ${UNIT_SHORT[from]} trae 1 unidad (botella, paquete…)?`
+      : from === 'unit'
+        ? `¿Cuántos ${UNIT_SHORT[to]} trae 1 unidad actual?`
+        : `1 ${UNIT_SHORT[to]} equivale a cuántos ${UNIT_SHORT[from]}`;
+  const q = (n: number) => `${(Math.round(n * 1000) / 1000).toLocaleString(locale)} ${UNIT_SHORT[to]}`;
+  const money = (n: number) => n.toLocaleString(locale, { style: 'currency', currency, maximumFractionDigits: 2 });
+
+  return (
+    <div className="mt-2 space-y-2 rounded-xl border border-brand-500/40 bg-brand-50 p-3 text-sm dark:bg-brand-500/10">
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <Label htmlFor="u-to">Nueva unidad</Label>
+          <Select id="u-to" value={to} onChange={(e) => setTo(e.target.value as MeasureUnit)}>
+            {options.map((u) => (
+              <option key={u} value={u}>
+                {UNIT_NAME[u]}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="u-factor">{question}</Label>
+          <Input id="u-factor" value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder={measure === 'ml' ? '750' : '1000'} />
+        </div>
+      </div>
+      {factor > 0 && (
+        <ul className="space-y-0.5 text-xs text-zinc-600 dark:text-zinc-300">
+          <li>Stock: {formatQuantity(ingredient.stock_quantity, from)} → {q(ingredient.stock_quantity / factor)}</li>
+          <li>Mínimo: {formatQuantity(ingredient.min_stock, from)} → {q(ingredient.min_stock / factor)}</li>
+          <li>
+            Costo: {money(ingredient.cost_per_unit)} por {UNIT_SHORT[from]} → {money(ingredient.cost_per_unit * factor)} por {UNIT_SHORT[to]}
+          </li>
+          <li>
+            {usedIn > 0
+              ? `Se convierten las ${usedIn} receta(s) que lo usan (ej. 60 ${UNIT_SHORT[from]} → ${q(60 / factor)}).`
+              : 'No está en recetas.'}{' '}
+            El historial también se convierte.
+          </li>
+        </ul>
+      )}
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          disabled={pending || !(factor > 0)}
+          onClick={() =>
+            confirm(`¿Convertir "${ingredient.name}" de ${UNIT_NAME[from]} a ${UNIT_NAME[to]}?`) &&
+            run(() => changeIngredientUnitAction({ ingredientId: ingredient.id, unit: to, factor }), 'Unidad cambiada', onDone)
+          }
+        >
+          Convertir
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+          Cancelar
+        </Button>
+      </div>
+      <FlashMessage flash={flash} />
+    </div>
   );
 }

@@ -34,6 +34,8 @@ export async function submitOrder(ctx: TenantContext, input: SubmitOrderInput): 
 
 export async function updateItemsStatus(ctx: TenantContext, input: UpdateItemsStatusInput): Promise<number> {
   const data = updateItemsStatusSchema.parse(input);
+  // Quitar productos de una comanda enviada tiene su propio flujo (admin + motivo).
+  if (data.status === 'cancelled') throw new Error('Para quitar productos usa "Quitar" en la cuenta (sólo administrador)');
   const { data: rows, error } = await ctx.supabase
     .from('order_items')
     .update({ status: data.status })
@@ -71,13 +73,36 @@ export async function setItemComp(ctx: TenantContext, input: ItemCompInput): Pro
   if (error) throw error;
 }
 
-export async function cancelOrder(ctx: TenantContext, orderId: string): Promise<void> {
-  const { error } = await ctx.supabase
-    .from('orders')
-    .update({ status: 'cancelled' })
-    .eq('tenant_id', ctx.tenant.id)
-    .eq('id', orderId);
+export type TransferResult = { mode: 'moved' | 'merged' | 'split'; order_id: string; table: string };
+
+/**
+ * Pasa la cuenta a otra mesa: si está libre se traslada, si tiene cuenta se unen
+ * (con sus abonos). La mesa de origen queda libre. Meseros, caja y admin.
+ */
+export async function transferOrder(ctx: TenantContext, orderId: string, tableId: string): Promise<TransferResult> {
+  const { data, error } = await ctx.supabase.rpc('transfer_order', { p_order_id: orderId, p_table_id: tableId });
   if (error) throw error;
+  return data as TransferResult;
+}
+
+/** Separa productos de una cuenta hacia otra mesa (a su cuenta abierta o a una nueva). */
+export async function transferOrderItems(ctx: TenantContext, itemIds: string[], tableId: string): Promise<TransferResult> {
+  const { data, error } = await ctx.supabase.rpc('transfer_order_items', { p_item_ids: itemIds, p_table_id: tableId });
+  if (error) throw error;
+  return data as TransferResult;
+}
+
+/** Anula la comanda completa (sólo admin, con motivo; lo valida la base). */
+export async function cancelOrder(ctx: TenantContext, orderId: string, reason: string): Promise<void> {
+  const { error } = await ctx.supabase.rpc('cancel_order', { p_order_id: orderId, p_reason: reason });
+  if (error) throw error;
+}
+
+/** Quita productos de una comanda ya enviada (sólo admin, con motivo; devuelve el stock). */
+export async function cancelOrderItems(ctx: TenantContext, itemIds: string[], reason: string): Promise<number> {
+  const { data, error } = await ctx.supabase.rpc('cancel_order_items', { p_item_ids: itemIds, p_reason: reason });
+  if (error) throw error;
+  return data;
 }
 
 /** Cuenta abierta de una mesa (o de una orden concreta) con ítems, asignaciones y pagos. */

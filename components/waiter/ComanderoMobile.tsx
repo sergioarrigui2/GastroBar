@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  ArrowRightLeft,
   Bell,
   Check,
   ChefHat,
@@ -18,16 +19,19 @@ import {
   Search,
   Send,
   ShoppingBag,
+  Split,
   Trash2,
   UtensilsCrossed,
   Users,
   WifiOff,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import {
   cancelOrderAction,
+  cancelOrderItemsAction,
   getOpenBillAction,
   setItemCompAction,
   setTableStatusAction,
@@ -38,6 +42,7 @@ import { signOutAction } from '@/app/actions/auth';
 import { DiscountSheet } from '@/components/billing/DiscountSheet';
 import { PaymentsList } from '@/components/billing/PaymentsList';
 import { SplitBillModal } from '@/components/billing/SplitBillModal';
+import { TransferSheet } from '@/components/waiter/TransferSheet';
 import { Badge, Button, Stepper } from '@/components/ui/primitives';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useRealtimeRefresh } from '@/components/ui/useRealtimeRefresh';
@@ -287,9 +292,11 @@ export function ComanderoMobile({
   };
 
   const cancelOrder = () => {
-    if (!bill || !tableId || !confirm('¿Anular la orden completa? Se devolverá el stock.')) return;
+    if (!bill || !tableId) return;
+    const reason = prompt('Motivo para anular la orden completa (se devolverá el stock):')?.trim();
+    if (!reason) return;
     startTransition(async () => {
-      const result = await cancelOrderAction(bill.order.id);
+      const result = await cancelOrderAction(bill.order.id, reason);
       if (!result.ok) notify(result.error, 'error');
       else {
         notify('Orden anulada');
@@ -634,6 +641,17 @@ export function ComanderoMobile({
                       router.refresh();
                     }}
                     notify={notify}
+                    table={{ id: table.id, label: table.label }}
+                    tables={snapshot.tables}
+                    onTransferred={(destTableId, mode) => {
+                      router.refresh();
+                      if (mode === 'split') return void loadBill(table.id);
+                      // La cuenta cambió de mesa: seguir en la mesa destino.
+                      setTableId(destTableId);
+                      setBill(null);
+                      setTab('bill');
+                      void loadBill(destTableId);
+                    }}
                   />
                 )}
               </div>
@@ -750,6 +768,9 @@ function BillView({
   onCharge,
   onChanged,
   notify,
+  table,
+  tables,
+  onTransferred,
 }: {
   bill: TableBill;
   money: (n: number) => string;
@@ -761,8 +782,23 @@ function BillView({
   onCharge: () => void;
   onChanged: () => void;
   notify: (text: string, tone?: 'ok' | 'error') => void;
+  table: { id: string; label: string };
+  tables: TableStatusEntry[];
+  onTransferred: (destTableId: string, mode: 'moved' | 'merged' | 'split') => void;
 }) {
   const canManage = role === 'admin' || role === 'cashier';
+  // Pasar a otra mesa: la cuenta completa ('all') o productos elegidos ('items').
+  const [transfer, setTransfer] = useState<null | 'all' | 'items'>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const toggleSelected = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const isAdmin = role === 'admin';
   const [discountOpen, setDiscountOpen] = useState(false);
   const [busy, startTransition] = useTransition();
   const rounds = useMemo(() => {
@@ -789,6 +825,20 @@ function BillView({
     });
   };
 
+  // Quitar un producto ya enviado: sólo admin, con motivo (la base lo exige igual).
+  const removeItem = (item: TableBill['items'][number]) => {
+    const reason = prompt(`Motivo para quitar ${item.quantity}× ${item.product_name} de la comanda:`)?.trim();
+    if (!reason) return;
+    startTransition(async () => {
+      const result = await cancelOrderItemsAction([item.id], reason);
+      if (!result.ok) notify(result.error, 'error');
+      else {
+        notify(`${item.product_name} quitado de la comanda`);
+        onChanged();
+      }
+    });
+  };
+
   return (
     <div className="space-y-4">
       {readyIds.length > 0 && (
@@ -805,6 +855,17 @@ function BillView({
               const status = item.status === 'cancelled' ? null : ITEM_STATUS[item.status];
               return (
                 <li key={item.id} className="flex items-center gap-2 px-3 py-2.5">
+                  {selecting && (
+                    <input
+                      type="checkbox"
+                      className="size-6 shrink-0 accent-brand-500"
+                      aria-label={`Separar ${item.product_name}`}
+                      checked={selected.has(item.id)}
+                      disabled={item.allocated > 0}
+                      title={item.allocated > 0 ? 'Ya está pagado: no se puede separar' : undefined}
+                      onChange={() => toggleSelected(item.id)}
+                    />
+                  )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">
                       {item.quantity}× {item.product_name}
@@ -837,6 +898,17 @@ function BillView({
                       )}
                     >
                       <Gift className="size-4" />
+                    </button>
+                  )}
+                  {isAdmin && item.status !== 'delivered' && item.allocated === 0 && (
+                    <button
+                      onClick={() => removeItem(item)}
+                      disabled={busy || pending}
+                      aria-label={`Quitar ${item.product_name} de la comanda`}
+                      title="Quitar de la comanda (sólo administrador)"
+                      className="grid size-10 place-items-center rounded-full text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
+                    >
+                      <X className="size-4" />
                     </button>
                   )}
                   {item.status === 'ready' && (
@@ -915,7 +987,44 @@ function BillView({
       <Button size="xl" className="w-full" onClick={onCharge} disabled={remaining <= 0 || pending}>
         <Receipt className="size-5" /> Cobrar / Dividir cuenta
       </Button>
-      {canManage && order.paid_amount === 0 && (
+      {selecting ? (
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="ghost" onClick={() => (setSelecting(false), setSelected(new Set()))}>
+            Cancelar
+          </Button>
+          <Button onClick={() => setTransfer('items')} disabled={selected.size === 0 || pending}>
+            <ArrowRightLeft className="size-4" /> Pasar {selected.size || ''} a otra mesa
+          </Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="secondary" onClick={() => setTransfer('all')} disabled={pending}>
+            <ArrowRightLeft className="size-4" /> Pasar a otra mesa
+          </Button>
+          <Button variant="secondary" onClick={() => setSelecting(true)} disabled={pending || bill.items.length < 2}>
+            <Split className="size-4" /> Separar productos
+          </Button>
+        </div>
+      )}
+      {transfer && (
+        <TransferSheet
+          orderId={order.id}
+          itemIds={transfer === 'items' ? [...selected] : undefined}
+          fromTableId={table.id}
+          fromLabel={table.label}
+          tables={tables}
+          money={money}
+          notify={notify}
+          onClose={() => setTransfer(null)}
+          onDone={(dest, mode) => {
+            setTransfer(null);
+            setSelecting(false);
+            setSelected(new Set());
+            onTransferred(dest, mode);
+          }}
+        />
+      )}
+      {isAdmin && order.paid_amount === 0 && (
         <Button variant="ghost" className="w-full text-red-600" onClick={onCancel} disabled={pending}>
           Anular orden
         </Button>

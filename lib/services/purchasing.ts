@@ -95,7 +95,8 @@ export const supplierSchema = z.object({
   email: z.union([z.email(), z.literal('')]).nullish(),
   lead_time_days: z.coerce.number().int().min(0).max(30),
   notes: z.string().trim().max(500).nullish(),
-  is_active: z.boolean().default(true),
+  /** Si no se envía, al editar se conserva el estado actual (al crear, activo). */
+  is_active: z.boolean().optional(),
 });
 
 export async function saveSupplier(ctx: TenantContext, input: z.input<typeof supplierSchema>) {
@@ -104,6 +105,11 @@ export async function saveSupplier(ctx: TenantContext, input: z.input<typeof sup
   const { error } = id
     ? await ctx.supabase.from('suppliers').update(row).eq('tenant_id', ctx.tenant.id).eq('id', id)
     : await ctx.supabase.from('suppliers').insert(row);
+  if (error) throw error;
+}
+
+export async function setSupplierActive(ctx: TenantContext, id: string, isActive: boolean) {
+  const { error } = await ctx.supabase.from('suppliers').update({ is_active: isActive }).eq('tenant_id', ctx.tenant.id).eq('id', z.uuid().parse(id));
   if (error) throw error;
 }
 

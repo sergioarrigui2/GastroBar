@@ -116,7 +116,7 @@ describe('schema', () => {
     assert.equal(updatedKitchen.length, 0);
     const updatedBar = await as(BAR_A, `update order_items set status = 'ready' where station = 'bar' returning id`);
     assert.equal(updatedBar.length, 2);
-    await assert.rejects(as(BAR_A, `update order_items set status = 'cancelled' where station = 'bar'`), /forbidden_transition/);
+    await assert.rejects(as(BAR_A, `update order_items set status = 'cancelled' where station = 'bar'`), /forbidden/);
   });
 
   test('aislamiento total entre tenants', async () => {
@@ -129,9 +129,18 @@ describe('schema', () => {
     await assert.rejects(as(WAITER_A, `select private.apply_recipe_stock($1, null, $2, 1, 1)`, [ids.tenantA, ids.mojito]), /permission denied/);
   });
 
-  test('cancelar un ítem devuelve el stock', async () => {
-    await as(WAITER_A, `update order_items set status = 'cancelled' where product_id = $1`, [ids.burger]);
+  test('quitar un ítem enviado: sólo admin, con motivo; devuelve el stock y queda quién y por qué', async () => {
+    const [burger] = await as<{ id: string }>(ADMIN_A, `select id from order_items where product_id = $1`, [ids.burger]);
+    await assert.rejects(as(WAITER_A, `update order_items set status = 'cancelled' where product_id = $1`, [ids.burger]), /forbidden/);
+    await assert.rejects(as(WAITER_A, `select public.cancel_order_items($1::uuid[], 'Se equivocó')`, [[burger!.id]]), /forbidden/);
+    await assert.rejects(as(ADMIN_A, `update order_items set status = 'cancelled' where product_id = $1`, [ids.burger]), /void_reason_required/);
+    await assert.rejects(as(ADMIN_A, `select public.cancel_order_items($1::uuid[], '  ')`, [[burger!.id]]), /void_reason_required/);
+    assert.equal(await stock('Carne'), 400, 'nada cambió');
+    const [r] = await as<{ n: number }>(ADMIN_A, `select public.cancel_order_items($1::uuid[], 'Cliente cambió de plato') as n`, [[burger!.id]]);
+    assert.equal(r!.n, 1);
     assert.equal(await stock('Carne'), 600);
+    const item = await one<{ status: string; cancel_reason: string; cancelled_by: string }>(ADMIN_A, `select status, cancel_reason, cancelled_by from order_items where id = $1`, [burger!.id]);
+    assert.deepEqual(item, { status: 'cancelled', cancel_reason: 'Cliente cambió de plato', cancelled_by: ADMIN_A });
   });
 
   test('pagos divididos: por ítem, sobrepago bloqueado y cierre con mesa liberada', async () => {
@@ -288,7 +297,7 @@ describe('schema', () => {
     const [line] = await as<{ tax_amount: string; tax_rate: string }>(WAITER_A, `select tax_amount, tax_rate from order_items where order_id = $1`, [excl.order_id]);
     assert.equal(Number(line!.tax_amount), 3800);
     assert.equal(Number(line!.tax_rate), 19);
-    await as(ADMIN_A, `update orders set status = 'cancelled' where id = $1`, [excl.order_id]);
+    await as(ADMIN_A, `select public.cancel_order($1, 'Prueba de impuestos')`, [excl.order_id]);
     await db.exec(`update public.tenants set prices_include_tax = true where id = '${ids.tenantA}'`);
 
     // INC 8% incluido (tarifa del tenant): el total no cambia, el impuesto se desglosa.
@@ -416,7 +425,7 @@ describe('facturación electrónica', () => {
     await as(ADMIN_A, `select public.void_payment($1, 'Error de caja')`, [pendingPay!.id]);
     assert.equal((await docsOf(ids.unbilledOrder!))[0]!.status, 'cancelled');
     // Libera la mesa: la cuenta reabierta sin pagos se anula.
-    await as(ADMIN_A, `update orders set status = 'cancelled' where id = $1`, [ids.unbilledOrder]);
+    await as(ADMIN_A, `select public.cancel_order($1, 'Cuenta reabierta sin pagos')`, [ids.unbilledOrder]);
 
     // Documento aceptado por el proveedor -> nota crédito y se permite re-facturar al volver a pagar.
     await db.exec(`update public.einvoice_documents set status = 'accepted', cufe = 'x' where order_id = '${ids.invOrder}'`);
@@ -675,5 +684,134 @@ describe('ubicación del gastrobar', () => {
     await assert.rejects(as(ADMIN_A, `update tenants set city = 'X'`), /tenants_city_len/);
     const [other] = await as<{ city: string | null }>(ADMIN_B, `select city from tenants`);
     assert.equal(other!.city, null, 'la ciudad de A no aparece para B');
+  });
+});
+
+describe('cambio de unidad de un insumo', () => {
+  test('de ml a botella convierte stock, mínimo, costo, recetas e historial; nadie más puede hacerlo', async () => {
+    const whisky = (await one<{ id: string }>(
+      ADMIN_A,
+      `insert into ingredients (name, unit, stock_quantity, min_stock, cost_per_unit, pack_size) values ('Whisky prueba', 'ml', 0, 1500, 145.2, 750) returning id`,
+    )).id;
+    await as(ADMIN_A, `select public.record_inventory_movement($1, 'purchase', 1500, 'Compra 2 botellas', 145.2)`, [whisky]);
+    const shot = (await one<{ id: string }>(ADMIN_A, `insert into products (category_id, name, price) values ($1, 'Shot prueba', 22000) returning id`, [ids.bar])).id;
+    await as(ADMIN_A, `insert into recipes (product_id, ingredient_id, quantity) values ($1, $2, 60)`, [shot, whisky]);
+
+    await assert.rejects(as(WAITER_A, `select public.change_ingredient_unit($1, 'unit', 750)`, [whisky]), /forbidden/);
+    await assert.rejects(as(ADMIN_B, `select public.change_ingredient_unit($1, 'unit', 750)`, [whisky]), /ingredient_not_found/);
+    await assert.rejects(as(ADMIN_A, `select public.change_ingredient_unit($1, 'unit', 0)`, [whisky]), /invalid_quantity/);
+
+    await as(ADMIN_A, `select public.change_ingredient_unit($1, 'unit', 750)`, [whisky]);
+    const ing = await one<{ unit: string; stock_quantity: string; min_stock: string; cost_per_unit: string; pack_size: string }>(
+      ADMIN_A,
+      `select unit, stock_quantity, min_stock, cost_per_unit, pack_size from ingredients where id = $1`,
+      [whisky],
+    );
+    assert.equal(ing.unit, 'unit');
+    assert.equal(Number(ing.stock_quantity), 2, '1.500 ml = 2 botellas');
+    assert.equal(Number(ing.min_stock), 2);
+    assert.equal(Number(ing.cost_per_unit), 108900, '$145,2/ml × 750 = $108.900 por botella');
+    assert.equal(Number(ing.pack_size), 1);
+    const recipe = await one<{ quantity: string }>(ADMIN_A, `select quantity from recipes where product_id = $1`, [shot]);
+    assert.equal(Number(recipe.quantity), 0.08, '60 ml = 0,08 botellas');
+    const mov = await one<{ quantity: string; unit_cost: string }>(ADMIN_A, `select quantity, unit_cost from inventory_movements where ingredient_id = $1`, [whisky]);
+    assert.equal(Number(mov.quantity), 2);
+    assert.equal(Number(mov.unit_cost), 108900);
+
+    // Volver a ml deja todo como estaba.
+    await as(ADMIN_A, `select public.change_ingredient_unit($1, 'ml', $2)`, [whisky, 1 / 750]);
+    const back = await one<{ stock_quantity: string; cost_per_unit: string }>(ADMIN_A, `select stock_quantity, cost_per_unit from ingredients where id = $1`, [whisky]);
+    assert.equal(Number(back.stock_quantity), 1500);
+    assert.equal(Number(back.cost_per_unit), 145.2);
+    const backRecipe = await one<{ quantity: string }>(ADMIN_A, `select quantity from recipes where product_id = $1`, [shot]);
+    assert.equal(Number(backRecipe.quantity), 60);
+  });
+});
+
+describe('anular comandas enviadas', () => {
+  test('sólo el admin anula la comanda completa, con motivo; los ítems heredan motivo y autor', async () => {
+    const t9 = (await one<{ id: string }>(ADMIN_A, `insert into tables (zone_id, label) values ($1, 'T9') returning id`, [ids.zone])).id;
+    const { order_id } = await submit(WAITER_A, [{ product_id: ids.mojito }], t9);
+    for (const who of [WAITER_A, BAR_A]) {
+      await assert.rejects(as(who, `select public.cancel_order($1, 'No quiso')`, [order_id]), /forbidden/);
+      // Mesero: la regla lo rechaza. Barra: ni siquiera ve la orden (0 filas).
+      await as(who, `update orders set status = 'cancelled' where id = $1`, [order_id]).catch((e) => assert.match(String(e), /forbidden/));
+    }
+    const still = await one<{ status: string }>(ADMIN_A, `select status from orders where id = $1`, [order_id]);
+    assert.notEqual(still.status, 'cancelled');
+    await assert.rejects(as(ADMIN_A, `update orders set status = 'cancelled' where id = $1`, [order_id]), /void_reason_required/);
+    await as(ADMIN_A, `select public.cancel_order($1, 'Clientes se fueron sin consumir')`, [order_id]);
+    const order = await one<{ status: string; cancel_reason: string; cancelled_by: string }>(ADMIN_A, `select status, cancel_reason, cancelled_by from orders where id = $1`, [order_id]);
+    assert.deepEqual(order, { status: 'cancelled', cancel_reason: 'Clientes se fueron sin consumir', cancelled_by: ADMIN_A });
+    const items = await as<{ status: string; cancel_reason: string }>(ADMIN_A, `select status, cancel_reason from order_items where order_id = $1`, [order_id]);
+    assert.ok(items.length > 0 && items.every((i) => i.status === 'cancelled' && i.cancel_reason === 'Clientes se fueron sin consumir'));
+    const table = await one<{ status: string }>(ADMIN_A, `select status from tables where id = $1`, [t9]);
+    assert.equal(table.status, 'free', 'la mesa queda libre');
+    await assert.rejects(as(ADMIN_A, `select public.cancel_order($1, 'Otra vez')`, [order_id]), /order_closed/);
+  });
+});
+
+describe('cambio de mesa, unión y separación de cuentas', () => {
+  test('trasladar a mesa libre, unir con abono incluido y separar productos; la mesa de origen queda libre', async () => {
+    const agua = (await one<{ id: string }>(ADMIN_A, `insert into products (category_id, name, price, track_stock) values ($1, 'Agua prueba', 5000, false) returning id`, [ids.bar])).id;
+    const mesa = async (label: string) => (await one<{ id: string }>(ADMIN_A, `insert into tables (zone_id, label) values ($1, $2) returning id`, [ids.zone, label])).id;
+    const [m3, m7, m8] = [await mesa('M3'), await mesa('M7'), await mesa('M8')];
+    const status = async (t: string) => (await one<{ status: string }>(ADMIN_A, `select status from tables where id = $1`, [t])).status;
+    const order = (id: string) => one<{ table_id: string; total: string; paid_amount: string; notes: string | null }>(ADMIN_A, `select table_id, total, paid_amount, notes from orders where id = $1`, [id]);
+
+    // Mesa 3: 2 aguas y un abono de 3.000 sin asignar a ítems.
+    const { order_id: cuenta3 } = await submit(WAITER_A, [{ product_id: agua, quantity: 2 }], m3);
+    await as(WAITER_A, `select public.register_payments($1, 'custom', $2::jsonb)`, [cuenta3, JSON.stringify([{ amount: 3000, method: 'card' }])]);
+
+    // Otro gastrobar y la barra no pueden moverla.
+    await assert.rejects(as(ADMIN_B, `select public.transfer_order($1, $2)`, [cuenta3, m7]), /forbidden|order_not_found/);
+    await assert.rejects(as(BAR_A, `select public.transfer_order($1, $2)`, [cuenta3, m7]), /forbidden/);
+
+    // 1) Trasladar a Mesa 7 (libre): la cuenta cambia de mesa y Mesa 3 queda libre.
+    const [moved] = await as<{ r: { mode: string } }>(WAITER_A, `select public.transfer_order($1, $2) as r`, [cuenta3, m7]);
+    assert.equal(moved!.r.mode, 'moved');
+    assert.equal((await order(cuenta3)).table_id, m7);
+    assert.equal(await status(m3), 'free');
+    assert.equal(await status(m7), 'occupied');
+
+    // Llegan clientes nuevos a Mesa 3 y abren su propia cuenta.
+    const { order_id: nueva3 } = await submit(WAITER_A, [{ product_id: agua, quantity: 1 }], m3);
+    assert.notEqual(nueva3, cuenta3);
+
+    // 2) Unir: Mesa 8 tiene 1 agua; la cuenta de Mesa 7 (con su abono) se une a Mesa 8.
+    const { order_id: cuenta8 } = await submit(WAITER_A, [{ product_id: agua, quantity: 1 }], m8);
+    const [merged] = await as<{ r: { mode: string; order_id: string } }>(WAITER_A, `select public.transfer_order($1, $2) as r`, [cuenta3, m8]);
+    assert.equal(merged!.r.mode, 'merged');
+    assert.equal(merged!.r.order_id, cuenta8);
+    const o8 = await order(cuenta8);
+    assert.equal(Number(o8.total), 15000, '1 + 2 aguas');
+    assert.equal(Number(o8.paid_amount), 3000, 'el abono viajó con la cuenta');
+    assert.match(o8.notes ?? '', /Unida con cuenta/);
+    assert.equal((await as(ADMIN_A, `select id from orders where id = $1`, [cuenta3])).length, 0, 'la cuenta unida no queda como anulada');
+    assert.equal(await status(m7), 'free');
+    const rounds = await as<{ round: number }>(ADMIN_A, `select distinct round from order_items where order_id = $1 order by round`, [cuenta8]);
+    assert.deepEqual(rounds.map((r) => r.round), [1, 2], 'las rondas unidas no se mezclan en el KDS');
+
+    // 3) Separar: 1 de los ítems de Mesa 8 pasa a Mesa 7 (libre) en una cuenta nueva.
+    const [item] = await as<{ id: string }>(ADMIN_A, `select id from order_items where order_id = $1 and round = 2`, [cuenta8]);
+    const [split] = await as<{ r: { mode: string; order_id: string } }>(WAITER_A, `select public.transfer_order_items($1::uuid[], $2) as r`, [[item!.id], m7]);
+    assert.equal(split!.r.mode, 'split');
+    assert.equal(Number((await order(split!.r.order_id)).total), 10000);
+    assert.equal(Number((await order(cuenta8)).total), 5000);
+    assert.equal(await status(m7), 'occupied');
+
+    // Separar TODOS los productos de una cuenta equivale a moverla completa (aquí: se une a Mesa 8).
+    const [last] = await as<{ id: string }>(ADMIN_A, `select id from order_items where order_id = $1`, [split!.r.order_id]);
+    const [all] = await as<{ r: { mode: string } }>(WAITER_A, `select public.transfer_order_items($1::uuid[], $2) as r`, [[last!.id], m8]);
+    assert.equal(all!.r.mode, 'merged');
+    assert.equal(await status(m7), 'free');
+    // Separar un ítem ya pagado por ítem: bloqueado.
+    const { order_id: c3 } = await submit(WAITER_A, [{ product_id: agua, quantity: 1 }], m3);
+    const [paidItem] = await as<{ id: string; line_total: string }>(ADMIN_A, `select id, line_total from order_items where order_id = $1 order by created_at limit 1`, [c3]);
+    await as(WAITER_A, `select public.register_payments($1, 'by_item', $2::jsonb)`, [
+      c3,
+      JSON.stringify([{ amount: Number(paidItem!.line_total), method: 'card', allocations: [{ order_item_id: paidItem!.id, amount: Number(paidItem!.line_total) }] }]),
+    ]);
+    await assert.rejects(as(WAITER_A, `select public.transfer_order_items($1::uuid[], $2)`, [[paidItem!.id], m7]), /item_already_paid/);
   });
 });

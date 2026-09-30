@@ -21,7 +21,7 @@ import {
   type TenantSettingsInput,
   type ZoneInput,
 } from '@/lib/validations/catalog';
-import type { Json, Tables } from '@/types/database';
+import type { Json, MeasureUnit, Tables } from '@/types/database';
 
 export type CatalogSnapshot = {
   categories: Tables<'categories'>[];
@@ -150,11 +150,24 @@ export async function saveSubRecipe(ctx: TenantContext, input: SubRecipeInput): 
 // ── Insumos ─────────────────────────────────────────────────────────────────
 export async function saveIngredient(ctx: TenantContext, input: IngredientInput) {
   const { id, initial_stock, ...data } = ingredientSchema.parse(input);
-  const query = id
-    ? ctx.supabase.from('ingredients').update(data).eq('tenant_id', ctx.tenant.id).eq('id', id)
-    : ctx.supabase.from('ingredients').insert({ ...data, stock_quantity: initial_stock ?? 0 });
-  const { error } = await query;
+  if (id) {
+    const { error } = await ctx.supabase.from('ingredients').update(data).eq('tenant_id', ctx.tenant.id).eq('id', id);
+    if (error) throw error;
+    return;
+  }
+  const { data: created, error } = await ctx.supabase.from('ingredients').insert({ ...data, stock_quantity: 0 }).select('id').single();
   if (error) throw error;
+  // El stock inicial entra como ajuste: queda en el historial y se puede rastrear o corregir.
+  if (initial_stock && initial_stock > 0) {
+    const { error: movementError } = await ctx.supabase.rpc('record_inventory_movement', {
+      p_ingredient_id: created.id,
+      p_type: 'adjustment',
+      p_quantity: initial_stock,
+      p_reason: 'Stock inicial',
+      p_unit_cost: data.cost_per_unit,
+    });
+    if (movementError) throw movementError;
+  }
 }
 
 // ── Zonas y mesas ───────────────────────────────────────────────────────────
@@ -234,6 +247,15 @@ export async function getIngredientUsage(ctx: TenantContext, ingredientId: strin
   if (productsRes.error) throw productsRes.error;
   if (subRecipesRes.error) throw subRecipesRes.error;
   return { products: productsRes.data ?? [], subRecipes: subRecipesRes.data ?? [] };
+}
+
+/**
+ * Cambia la unidad de un insumo convirtiendo stock, mínimo, costo, empaque, recetas,
+ * sub-recetas e historial. factor = cuántas unidades actuales trae 1 unidad nueva.
+ */
+export async function changeIngredientUnit(ctx: TenantContext, ingredientId: string, unit: MeasureUnit, factor: number) {
+  const { error } = await ctx.supabase.rpc('change_ingredient_unit', { p_ingredient_id: ingredientId, p_unit: unit, p_factor: factor });
+  if (error) throw error;
 }
 
 export function describeUsage(usage: IngredientUsage, max = 5): string {

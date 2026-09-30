@@ -3617,3 +3617,559 @@ create index if not exists staff_pins_tenant_idx on public.staff_pins (tenant_id
 alter table public.staff_pins enable row level security;
 -- Sin políticas a propósito: sólo el service role (que ignora RLS) la toca.
 revoke all on public.staff_pins from anon, authenticated;
+
+-- =============================================================================
+-- 26. CAMBIO DE UNIDAD DE INSUMOS CON CONVERSIÓN (también en migrations/015_change_ingredient_unit.sql)
+-- =============================================================================
+
+create or replace function public.change_ingredient_unit(
+  p_ingredient_id uuid,
+  p_unit          public.measure_unit,
+  p_factor        numeric)
+returns public.ingredients language plpgsql security definer set search_path = '' as $$
+declare
+  v_tenant uuid := private.current_tenant_id();
+  v_ing    public.ingredients;
+begin
+  if v_tenant is null then
+    raise exception 'not_authenticated' using errcode = '42501';
+  end if;
+  if not private.has_role('admin') then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+  if p_factor is null or p_factor <= 0 or p_factor > 1000000 then
+    raise exception 'invalid_quantity' using errcode = '22023';
+  end if;
+
+  select * into v_ing from public.ingredients
+   where id = p_ingredient_id and tenant_id = v_tenant for update;
+  if not found then
+    raise exception 'ingredient_not_found' using errcode = 'P0002';
+  end if;
+  if v_ing.unit = p_unit then
+    return v_ing;
+  end if;
+
+  -- Cantidades de receta: nunca por debajo del mínimo representable (0,001).
+  update public.recipes
+     set quantity = greatest(round(quantity / p_factor, 3), 0.001)
+   where tenant_id = v_tenant and ingredient_id = p_ingredient_id;
+  update public.sub_recipe_ingredients
+     set quantity = greatest(round(quantity / p_factor, 3), 0.001)
+   where tenant_id = v_tenant and ingredient_id = p_ingredient_id;
+  update public.inventory_movements
+     set quantity  = round(quantity / p_factor, 3),
+         unit_cost = round(unit_cost * p_factor, 4)
+   where tenant_id = v_tenant and ingredient_id = p_ingredient_id;
+
+  update public.ingredients
+     set unit           = p_unit,
+         stock_quantity = round(stock_quantity / p_factor, 3),
+         min_stock      = round(min_stock / p_factor, 3),
+         cost_per_unit  = round(cost_per_unit * p_factor, 4),
+         pack_size      = case when pack_size is null then null
+                               else nullif(round(pack_size / p_factor, 3), 0) end,
+         updated_at     = now()
+   where id = p_ingredient_id and tenant_id = v_tenant
+  returning * into v_ing;
+
+  return v_ing;
+end $$;
+
+revoke execute on function public.change_ingredient_unit(uuid, public.measure_unit, numeric) from public, anon;
+grant execute on function public.change_ingredient_unit(uuid, public.measure_unit, numeric) to authenticated;
+
+-- =============================================================================
+-- 27. SÓLO EL ADMINISTRADOR ANULA (también en migrations/016_admin_only_voids.sql)
+-- =============================================================================
+
+alter table public.order_items add column if not exists cancel_reason text;
+alter table public.order_items add column if not exists cancelled_by  uuid;
+alter table public.orders      add column if not exists cancel_reason text;
+alter table public.orders      add column if not exists cancelled_by  uuid;
+
+create or replace function private.before_order_item_update()
+returns trigger language plpgsql set search_path = '' as $$
+declare
+  v_role public.app_role := private.current_app_role();
+begin
+  new.tenant_id       := old.tenant_id;
+  new.order_id        := old.order_id;
+  new.product_id      := old.product_id;
+  new.product_name    := old.product_name;
+  new.station         := old.station;
+  new.quantity        := old.quantity;
+  new.unit_price      := old.unit_price;
+  new.modifier_ids    := old.modifier_ids;
+  new.modifiers       := old.modifiers;
+  new.modifiers_total := old.modifiers_total;
+  new.gross_total     := old.gross_total;
+  new.tax_rate        := old.tax_rate;
+  new.tax_amount      := old.tax_amount;
+  new.round           := old.round;
+  new.created_at      := old.created_at;
+
+  -- Cortesía: sólo admin / caja, con motivo, antes de cobrar el ítem.
+  if new.comped is distinct from old.comped then
+    if not private.has_role('admin', 'cashier') then
+      raise exception 'forbidden' using errcode = '42501';
+    end if;
+    if (select o.status from public.orders o where o.id = old.order_id) in ('paid', 'cancelled') then
+      raise exception 'order_closed' using errcode = '22023';
+    end if;
+    if exists (select 1 from public.payment_allocations a
+                 join public.payments p on p.id = a.payment_id
+                where a.order_item_id = old.id and p.voided_at is null) then
+      raise exception 'item_already_paid' using errcode = '22023';
+    end if;
+    if new.comped then
+      if nullif(trim(new.comp_reason), '') is null then
+        raise exception 'comp_reason_required' using errcode = '22023';
+      end if;
+      new.comp_reason := trim(new.comp_reason);
+      new.comped_by   := auth.uid();
+    else
+      new.comp_reason := null;
+      new.comped_by   := null;
+    end if;
+  else
+    new.comp_reason := old.comp_reason;
+    new.comped_by   := old.comped_by;
+  end if;
+  new.line_total := case when new.comped then 0 else old.gross_total end;
+
+  -- Motivo y autor de la anulación: sólo se fijan al cancelar.
+  new.cancel_reason := old.cancel_reason;
+  new.cancelled_by  := old.cancelled_by;
+
+  if new.status is distinct from old.status then
+    if old.status in ('cancelled', 'delivered') and pg_trigger_depth() = 1 then
+      raise exception 'item_status_final: %', old.status using errcode = '22023';
+    end if;
+    -- Quitar un producto de una comanda ya enviada: sólo el administrador, con motivo
+    -- y antes de cobrarlo. (Si viene de anular la orden completa, pg_trigger_depth() > 1.)
+    if new.status = 'cancelled' and pg_trigger_depth() = 1 then
+      if not private.has_role('admin') then
+        raise exception 'forbidden' using errcode = '42501';
+      end if;
+      if exists (select 1 from public.payment_allocations a
+                   join public.payments p on p.id = a.payment_id
+                  where a.order_item_id = old.id and p.voided_at is null) then
+        raise exception 'item_already_paid' using errcode = '22023';
+      end if;
+      if nullif(trim(current_setting('app.cancel_reason', true)), '') is null then
+        raise exception 'void_reason_required' using errcode = '22023';
+      end if;
+      new.cancel_reason := trim(current_setting('app.cancel_reason', true));
+      new.cancelled_by  := auth.uid();
+    elsif new.status = 'cancelled' then
+      -- Cancelado junto con la orden completa: hereda su motivo.
+      new.cancel_reason := nullif(trim(current_setting('app.cancel_reason', true)), '');
+      new.cancelled_by  := auth.uid();
+    end if;
+    if pg_trigger_depth() = 1 and v_role in ('kitchen', 'bar') and new.status in ('cancelled', 'delivered') then
+      raise exception 'forbidden_transition' using errcode = '42501';
+    end if;
+    case new.status
+      when 'pending'        then new.started_at := null; new.ready_at := null;
+      when 'in_preparation' then new.started_at := coalesce(old.started_at, now()); new.ready_at := null;
+      when 'ready'          then new.started_at := coalesce(old.started_at, now()); new.ready_at := now();
+      when 'delivered'      then new.delivered_at := now(); new.ready_at := coalesce(old.ready_at, now());
+      when 'cancelled'      then new.cancelled_at := now();
+    end case;
+  end if;
+  return new;
+end $$;
+
+create or replace function private.before_order_update()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  -- Columnas del sistema: sólo refresh_order las cambia (activa app.order_guard_bypass).
+  if pg_trigger_depth() = 1 and coalesce(current_setting('app.order_guard_bypass', true), 'off') <> 'on' then
+    new.tenant_id      := old.tenant_id;
+    new.order_number   := old.order_number;
+    new.subtotal       := old.subtotal;
+    new.total          := old.total;
+    new.paid_amount    := old.paid_amount;
+    new.discount_total := old.discount_total;
+    new.tax_total      := old.tax_total;
+    new.created_at     := old.created_at;
+    new.created_by     := old.created_by;
+
+    if new.status is distinct from old.status then
+      if new.status <> 'cancelled' then
+        raise exception 'order_status_is_derived' using errcode = '22023';
+      end if;
+      if old.paid_amount > 0 then
+        raise exception 'order_has_payments' using errcode = '22023';
+      end if;
+      -- Anular una comanda enviada: sólo el administrador, con motivo.
+      if not private.has_role('admin') then
+        raise exception 'forbidden' using errcode = '42501';
+      end if;
+      if nullif(trim(current_setting('app.cancel_reason', true)), '') is null then
+        raise exception 'void_reason_required' using errcode = '22023';
+      end if;
+      new.cancel_reason := trim(current_setting('app.cancel_reason', true));
+      new.cancelled_by  := auth.uid();
+    else
+      new.cancel_reason := old.cancel_reason;
+      new.cancelled_by  := old.cancelled_by;
+    end if;
+
+    -- Descuento de cuenta: sólo admin / caja, con motivo, con la orden abierta.
+    if new.discount_type is distinct from old.discount_type or new.discount_value is distinct from old.discount_value then
+      if not private.has_role('admin', 'cashier') then
+        raise exception 'forbidden' using errcode = '42501';
+      end if;
+      if old.status in ('paid', 'cancelled') then
+        raise exception 'order_closed' using errcode = '22023';
+      end if;
+      if new.discount_type is null or new.discount_value = 0 then
+        new.discount_type := null; new.discount_value := 0; new.discount_reason := null; new.discount_by := null;
+      else
+        if nullif(trim(new.discount_reason), '') is null then
+          raise exception 'discount_reason_required' using errcode = '22023';
+        end if;
+        new.discount_reason := trim(new.discount_reason);
+        new.discount_by := auth.uid();
+      end if;
+    else
+      new.discount_reason := old.discount_reason;
+      new.discount_by     := old.discount_by;
+    end if;
+  end if;
+
+  if new.status in ('paid', 'cancelled') and old.status not in ('paid', 'cancelled') then
+    new.closed_at := now();
+  elsif old.status = 'paid' and new.status not in ('paid', 'cancelled') then
+    new.closed_at := null;                    -- reapertura por anulación de pago
+  end if;
+  return new;
+end $$;
+
+-- Quita productos de una comanda enviada (admin, con motivo).
+create or replace function public.cancel_order_items(p_item_ids uuid[], p_reason text)
+returns integer language plpgsql security invoker set search_path = '' as $$
+declare
+  v_count integer;
+begin
+  if not private.has_role('admin') then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+  if nullif(trim(p_reason), '') is null then
+    raise exception 'void_reason_required' using errcode = '22023';
+  end if;
+  perform set_config('app.cancel_reason', trim(p_reason), true);
+  update public.order_items
+     set status = 'cancelled'
+   where id = any(p_item_ids)
+     and tenant_id = (select private.current_tenant_id())
+     and status <> 'cancelled';
+  get diagnostics v_count = row_count;
+  perform set_config('app.cancel_reason', '', true);
+  return v_count;
+end $$;
+
+-- Anula la comanda completa (admin, con motivo, sin pagos).
+create or replace function public.cancel_order(p_order_id uuid, p_reason text)
+returns void language plpgsql security invoker set search_path = '' as $$
+begin
+  if not private.has_role('admin') then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+  if nullif(trim(p_reason), '') is null then
+    raise exception 'void_reason_required' using errcode = '22023';
+  end if;
+  perform set_config('app.cancel_reason', trim(p_reason), true);
+  update public.orders
+     set status = 'cancelled'
+   where id = p_order_id
+     and tenant_id = (select private.current_tenant_id())
+     and status not in ('paid', 'cancelled');
+  if not found then
+    raise exception 'order_closed' using errcode = '22023';
+  end if;
+  perform set_config('app.cancel_reason', '', true);
+end $$;
+
+revoke execute on function public.cancel_order_items(uuid[], text) from public, anon;
+revoke execute on function public.cancel_order(uuid, text) from public, anon;
+grant execute on function public.cancel_order_items(uuid[], text) to authenticated;
+grant execute on function public.cancel_order(uuid, text) to authenticated;
+
+-- =============================================================================
+-- 28. CAMBIO DE MESA, UNIÓN Y SEPARACIÓN DE CUENTAS (también en migrations/017_transfer_orders.sql)
+-- =============================================================================
+
+create or replace function private.before_order_item_update()
+returns trigger language plpgsql set search_path = '' as $$
+declare
+  v_role public.app_role := private.current_app_role();
+begin
+  new.tenant_id       := old.tenant_id;
+  -- Cambio de mesa / unión de cuentas: sólo las RPC de traslado mueven ítems entre órdenes.
+  if coalesce(current_setting('app.item_move', true), 'off') <> 'on' then
+    new.order_id := old.order_id;
+    new.round    := old.round;
+  end if;
+  new.product_id      := old.product_id;
+  new.product_name    := old.product_name;
+  new.station         := old.station;
+  new.quantity        := old.quantity;
+  new.unit_price      := old.unit_price;
+  new.modifier_ids    := old.modifier_ids;
+  new.modifiers       := old.modifiers;
+  new.modifiers_total := old.modifiers_total;
+  new.gross_total     := old.gross_total;
+  new.tax_rate        := old.tax_rate;
+  new.tax_amount      := old.tax_amount;
+  new.created_at      := old.created_at;
+
+  -- Cortesía: sólo admin / caja, con motivo, antes de cobrar el ítem.
+  if new.comped is distinct from old.comped then
+    if not private.has_role('admin', 'cashier') then
+      raise exception 'forbidden' using errcode = '42501';
+    end if;
+    if (select o.status from public.orders o where o.id = old.order_id) in ('paid', 'cancelled') then
+      raise exception 'order_closed' using errcode = '22023';
+    end if;
+    if exists (select 1 from public.payment_allocations a
+                 join public.payments p on p.id = a.payment_id
+                where a.order_item_id = old.id and p.voided_at is null) then
+      raise exception 'item_already_paid' using errcode = '22023';
+    end if;
+    if new.comped then
+      if nullif(trim(new.comp_reason), '') is null then
+        raise exception 'comp_reason_required' using errcode = '22023';
+      end if;
+      new.comp_reason := trim(new.comp_reason);
+      new.comped_by   := auth.uid();
+    else
+      new.comp_reason := null;
+      new.comped_by   := null;
+    end if;
+  else
+    new.comp_reason := old.comp_reason;
+    new.comped_by   := old.comped_by;
+  end if;
+  new.line_total := case when new.comped then 0 else old.gross_total end;
+
+  -- Motivo y autor de la anulación: sólo se fijan al cancelar.
+  new.cancel_reason := old.cancel_reason;
+  new.cancelled_by  := old.cancelled_by;
+
+  if new.status is distinct from old.status then
+    if old.status in ('cancelled', 'delivered') and pg_trigger_depth() = 1 then
+      raise exception 'item_status_final: %', old.status using errcode = '22023';
+    end if;
+    -- Quitar un producto de una comanda ya enviada: sólo el administrador, con motivo
+    -- y antes de cobrarlo. (Si viene de anular la orden completa, pg_trigger_depth() > 1.)
+    if new.status = 'cancelled' and pg_trigger_depth() = 1 then
+      if not private.has_role('admin') then
+        raise exception 'forbidden' using errcode = '42501';
+      end if;
+      if exists (select 1 from public.payment_allocations a
+                   join public.payments p on p.id = a.payment_id
+                  where a.order_item_id = old.id and p.voided_at is null) then
+        raise exception 'item_already_paid' using errcode = '22023';
+      end if;
+      if nullif(trim(current_setting('app.cancel_reason', true)), '') is null then
+        raise exception 'void_reason_required' using errcode = '22023';
+      end if;
+      new.cancel_reason := trim(current_setting('app.cancel_reason', true));
+      new.cancelled_by  := auth.uid();
+    elsif new.status = 'cancelled' then
+      -- Cancelado junto con la orden completa: hereda su motivo.
+      new.cancel_reason := nullif(trim(current_setting('app.cancel_reason', true)), '');
+      new.cancelled_by  := auth.uid();
+    end if;
+    if pg_trigger_depth() = 1 and v_role in ('kitchen', 'bar') and new.status in ('cancelled', 'delivered') then
+      raise exception 'forbidden_transition' using errcode = '42501';
+    end if;
+    case new.status
+      when 'pending'        then new.started_at := null; new.ready_at := null;
+      when 'in_preparation' then new.started_at := coalesce(old.started_at, now()); new.ready_at := null;
+      when 'ready'          then new.started_at := coalesce(old.started_at, now()); new.ready_at := now();
+      when 'delivered'      then new.delivered_at := now(); new.ready_at := coalesce(old.ready_at, now());
+      when 'cancelled'      then new.cancelled_at := now();
+    end case;
+  end if;
+  return new;
+end $$;
+
+-- Libera la mesa si ya no tiene cuentas abiertas; si tiene, la marca ocupada.
+create or replace function private.sync_table_status(p_table_id uuid)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  if p_table_id is null then
+    return;
+  end if;
+  update public.tables t
+     set status = case when exists (select 1 from public.orders o
+                                     where o.table_id = t.id and o.status not in ('paid', 'cancelled'))
+                       then 'occupied'::public.table_status else 'free'::public.table_status end
+   where t.id = p_table_id;
+end $$;
+
+create or replace function public.transfer_order(p_order_id uuid, p_table_id uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_tenant uuid := private.current_tenant_id();
+  v_src    public.orders;
+  v_dst    public.orders;
+  v_from   text;
+  v_to     text;
+  v_offset integer;
+begin
+  if v_tenant is null or not private.has_role('admin', 'cashier', 'waiter') then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+  select * into v_src from public.orders
+   where id = p_order_id and tenant_id = v_tenant for update;
+  if not found then
+    raise exception 'order_not_found' using errcode = 'P0002';
+  end if;
+  if v_src.status in ('paid', 'cancelled') then
+    raise exception 'order_closed' using errcode = '22023';
+  end if;
+  select label into v_to from public.tables where id = p_table_id and tenant_id = v_tenant;
+  if v_to is null then
+    raise exception 'table_not_found' using errcode = 'P0002';
+  end if;
+  if v_src.table_id = p_table_id then
+    raise exception 'same_table' using errcode = '22023';
+  end if;
+  select label into v_from from public.tables where id = v_src.table_id;
+
+  select * into v_dst from public.orders
+   where table_id = p_table_id and tenant_id = v_tenant and status not in ('paid', 'cancelled')
+     for update;
+
+  -- Mesa libre: la cuenta completa cambia de mesa.
+  if not found then
+    update public.orders set table_id = p_table_id where id = v_src.id;
+    perform private.sync_table_status(v_src.table_id);
+    perform private.sync_table_status(p_table_id);
+    return jsonb_build_object('mode', 'moved', 'order_id', v_src.id, 'table', v_to);
+  end if;
+
+  -- Mesa con cuenta: se unen. Un descuento de cuenta no se fusiona con la otra.
+  if v_src.discount_type is not null then
+    raise exception 'order_has_discount' using errcode = '22023';
+  end if;
+  if exists (select 1 from public.einvoice_documents d where d.order_id = v_src.id) then
+    raise exception 'order_has_einvoice' using errcode = '22023';
+  end if;
+
+  select coalesce(max(round), 0) into v_offset from public.order_items where order_id = v_dst.id;
+  perform set_config('app.item_move', 'on', true);
+  update public.order_items
+     set order_id = v_dst.id, round = round + v_offset
+   where order_id = v_src.id;
+  perform set_config('app.item_move', 'off', true);
+  -- Los abonos viajan con la cuenta.
+  update public.payments set order_id = v_dst.id where order_id = v_src.id;
+
+  update public.orders
+     set guests = case when v_src.guests is null and v_dst.guests is null then null
+                       else coalesce(v_src.guests, 0) + coalesce(v_dst.guests, 0) end,
+         billing_customer = coalesce(v_dst.billing_customer, v_src.billing_customer),
+         notes = concat_ws(' | ', v_dst.notes,
+                           format('Unida con cuenta #%s (%s)', v_src.order_number, coalesce(v_from, 'sin mesa')),
+                           v_src.notes)
+   where id = v_dst.id;
+  delete from public.orders where id = v_src.id;
+
+  perform private.refresh_order(v_dst.id);
+  perform private.sync_table_status(v_src.table_id);
+  perform private.sync_table_status(p_table_id);
+  return jsonb_build_object('mode', 'merged', 'order_id', v_dst.id, 'table', v_to);
+end $$;
+
+create or replace function public.transfer_order_items(p_item_ids uuid[], p_table_id uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_tenant  uuid := private.current_tenant_id();
+  v_src_id  uuid;
+  v_orders  integer;
+  v_moving  integer;
+  v_active  integer;
+  v_src     public.orders;
+  v_dst_id  uuid;
+  v_offset  integer;
+  v_to      text;
+begin
+  if v_tenant is null or not private.has_role('admin', 'cashier', 'waiter') then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+  if p_item_ids is null or cardinality(p_item_ids) = 0 then
+    raise exception 'empty_order' using errcode = '22023';
+  end if;
+
+  -- Todos los ítems deben ser de UNA cuenta abierta de este gastrobar.
+  select min(i.order_id::text)::uuid, count(distinct i.order_id)::int, count(*)::int
+    into v_src_id, v_orders, v_moving
+    from public.order_items i
+   where i.id = any(p_item_ids) and i.tenant_id = v_tenant and i.status <> 'cancelled';
+  if v_src_id is null or v_moving <> cardinality(p_item_ids) then
+    raise exception 'order_not_found' using errcode = 'P0002';
+  end if;
+  if v_orders <> 1 then
+    raise exception 'items_from_several_orders' using errcode = '22023';
+  end if;
+  select * into v_src from public.orders where id = v_src_id for update;
+  if v_src.status in ('paid', 'cancelled') then
+    raise exception 'order_closed' using errcode = '22023';
+  end if;
+
+  -- Si se separan TODOS los productos, es cambiar la cuenta completa de mesa.
+  select count(*) into v_active from public.order_items where order_id = v_src.id and status <> 'cancelled';
+  if v_moving = v_active then
+    return public.transfer_order(v_src.id, p_table_id);
+  end if;
+
+  if exists (select 1 from public.payment_allocations a
+               join public.payments p on p.id = a.payment_id
+              where a.order_item_id = any(p_item_ids) and p.voided_at is null) then
+    raise exception 'item_already_paid' using errcode = '22023';
+  end if;
+  select label into v_to from public.tables where id = p_table_id and tenant_id = v_tenant;
+  if v_to is null then
+    raise exception 'table_not_found' using errcode = 'P0002';
+  end if;
+  if v_src.table_id = p_table_id then
+    raise exception 'same_table' using errcode = '22023';
+  end if;
+
+  select id into v_dst_id from public.orders
+   where table_id = p_table_id and tenant_id = v_tenant and status not in ('paid', 'cancelled')
+     for update;
+  if v_dst_id is null then
+    insert into public.orders (table_id, waiter_id, source)
+    values (p_table_id, auth.uid(), 'pos')
+    returning id into v_dst_id;
+  end if;
+
+  select coalesce(max(round), 0) into v_offset from public.order_items where order_id = v_dst_id;
+  perform set_config('app.item_move', 'on', true);
+  update public.order_items
+     set order_id = v_dst_id, round = round + v_offset
+   where id = any(p_item_ids);
+  perform set_config('app.item_move', 'off', true);
+
+  perform private.refresh_order(v_src.id);
+  perform private.refresh_order(v_dst_id);
+  -- Los abonos sin asignar se quedan en la cuenta de origen: no pueden superar lo que queda.
+  if exists (select 1 from public.orders where id = v_src.id and paid_amount > total + 0.009) then
+    raise exception 'overpayment' using errcode = '22023';
+  end if;
+  perform private.sync_table_status(p_table_id);
+  return jsonb_build_object('mode', 'split', 'order_id', v_dst_id, 'table', v_to);
+end $$;
+
+revoke all on function private.sync_table_status(uuid) from public, anon, authenticated;
+revoke execute on function public.transfer_order(uuid, uuid) from public, anon;
+revoke execute on function public.transfer_order_items(uuid[], uuid) from public, anon;
+grant execute on function public.transfer_order(uuid, uuid) to authenticated;
+grant execute on function public.transfer_order_items(uuid[], uuid) to authenticated;

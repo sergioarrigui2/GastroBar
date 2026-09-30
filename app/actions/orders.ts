@@ -5,6 +5,9 @@ import { FLOOR_ROLES, KDS_ROLES, runAction } from '@/lib/actions';
 import {
   applyOrderDiscount,
   cancelOrder,
+  cancelOrderItems,
+  transferOrder,
+  transferOrderItems,
   getKdsTickets,
   getOpenBill,
   setItemComp,
@@ -37,8 +40,24 @@ export async function setItemCompAction(input: ItemCompInput) {
   return runAction(['admin', 'cashier'], (ctx) => setItemComp(ctx, input));
 }
 
-export async function cancelOrderAction(orderId: string) {
-  return runAction(['admin', 'cashier'], (ctx) => cancelOrder(ctx, z.uuid().parse(orderId)));
+const reasonSchema = z.string().trim().min(3, 'Escribe el motivo').max(200);
+
+export async function cancelOrderAction(orderId: string, reason: string) {
+  return runAction(['admin'], (ctx) => cancelOrder(ctx, z.uuid().parse(orderId), reasonSchema.parse(reason)));
+}
+
+export async function transferOrderAction(orderId: string, tableId: string) {
+  return runAction(FLOOR_ROLES, (ctx) => transferOrder(ctx, z.uuid().parse(orderId), z.uuid().parse(tableId)));
+}
+
+export async function transferOrderItemsAction(itemIds: string[], tableId: string) {
+  return runAction(FLOOR_ROLES, (ctx) =>
+    transferOrderItems(ctx, z.array(z.uuid()).min(1).max(100).parse(itemIds), z.uuid().parse(tableId)),
+  );
+}
+
+export async function cancelOrderItemsAction(itemIds: string[], reason: string) {
+  return runAction(['admin'], (ctx) => cancelOrderItems(ctx, z.array(z.uuid()).min(1).max(100).parse(itemIds), reasonSchema.parse(reason)));
 }
 
 export async function getOpenBillAction(tableId: string) {

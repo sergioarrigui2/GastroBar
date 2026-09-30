@@ -23,6 +23,7 @@ import {
   runPurchasePlanAction,
   savePurchaseScheduleAction,
   saveSupplierAction,
+  setSupplierActiveAction,
   updateIngredientPurchasingAction,
 } from '@/app/actions/purchasing';
 import { FlashMessage, useAdminMutation } from '@/components/admin/useAdminMutation';
@@ -560,6 +561,8 @@ const emptySupplier = { id: undefined as string | undefined, name: '', contact_n
 
 function SuppliersTab({ suppliers, pending, run }: { suppliers: Supplier[]; pending: boolean; run: Run }) {
   const [form, setForm] = useState(emptySupplier);
+  const active = suppliers.filter((s) => s.is_active);
+  const inactive = suppliers.filter((s) => !s.is_active);
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   return (
@@ -601,12 +604,12 @@ function SuppliersTab({ suppliers, pending, run }: { suppliers: Supplier[]; pend
         </div>
       </Card>
       <Card className="lg:col-span-3">
-        <h2 className="mb-3 font-semibold">Tus proveedores</h2>
-        {suppliers.length === 0 ? (
+        <h2 className="mb-3 font-semibold">Tus proveedores ({active.length})</h2>
+        {active.length === 0 ? (
           <p className="py-6 text-center text-sm text-zinc-500">Aún no has registrado proveedores.</p>
         ) : (
           <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {suppliers.map((s) => (
+            {active.map((s) => (
               <li key={s.id} className="flex items-center gap-3 py-2 text-sm">
                 <div className="min-w-0 flex-1">
                   <p className="font-medium">{s.name}</p>
@@ -631,6 +634,14 @@ function SuppliersTab({ suppliers, pending, run }: { suppliers: Supplier[]; pend
                 >
                   <Pencil className="size-4" />
                 </button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={pending}
+                  onClick={() => run(() => setSupplierActiveAction(s.id, false), `${s.name} desactivado`)}
+                >
+                  Desactivar
+                </Button>
                 <button
                   type="button"
                   aria-label={`Eliminar ${s.name}`}
@@ -643,6 +654,21 @@ function SuppliersTab({ suppliers, pending, run }: { suppliers: Supplier[]; pend
               </li>
             ))}
           </ul>
+        )}
+        {inactive.length > 0 && (
+          <details className="mt-4 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+            <summary className="cursor-pointer text-sm font-semibold text-zinc-500">Inactivos ({inactive.length}) · no aparecen al asignar proveedor</summary>
+            <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
+              {inactive.map((s) => (
+                <li key={s.id} className="flex items-center gap-3 py-2 text-sm text-zinc-500">
+                  <span className="min-w-0 flex-1 truncate">{s.name}</span>
+                  <Button variant="ghost" size="sm" disabled={pending} onClick={() => run(() => setSupplierActiveAction(s.id, true), `${s.name} reactivado`)}>
+                    Reactivar
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </details>
         )}
       </Card>
     </div>
@@ -697,11 +723,14 @@ function PackRow({ ingredient: i, suppliers, pending, run }: { ingredient: Ingre
       <td className="py-2 pr-3">
         <Select value={supplier} onChange={(e) => setSupplier(e.target.value)} className="h-9 min-w-40" aria-label={`Proveedor de ${i.name}`}>
           <option value="">Sin proveedor</option>
-          {suppliers.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
+          {suppliers
+            .filter((s) => s.is_active || s.id === i.supplier_id)
+            .map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+                {!s.is_active && ' (inactivo)'}
+              </option>
+            ))}
         </Select>
       </td>
       <td className="py-2 pr-3">

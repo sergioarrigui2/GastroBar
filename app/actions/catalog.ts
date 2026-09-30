@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { runAction } from '@/lib/actions';
 import {
   createTablesBulk,
+  changeIngredientUnit,
   deleteEntity,
   getIngredientUsage,
   isDeletableEntity,
@@ -89,6 +90,19 @@ export async function createTablesBulkAction(input: BulkTablesInput) {
 /** Dónde se usa un insumo (sólo lectura: no revalida el catálogo). */
 export async function getIngredientUsageAction(ingredientId: string) {
   return runAction(ADMIN, (ctx) => getIngredientUsage(ctx, z.uuid().parse(ingredientId)));
+}
+
+const changeUnitSchema = z.object({
+  ingredientId: z.uuid(),
+  unit: z.enum(['g', 'ml', 'unit']),
+  factor: z.number().positive('El factor debe ser mayor que 0').max(1_000_000),
+});
+
+export async function changeIngredientUnitAction(input: z.input<typeof changeUnitSchema>) {
+  return adminMutation(async (ctx) => {
+    const { ingredientId, unit, factor } = changeUnitSchema.parse(input);
+    await changeIngredientUnit(ctx, ingredientId, unit, factor);
+  });
 }
 
 export async function deleteEntityAction(entity: string, id: string) {

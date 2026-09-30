@@ -15,6 +15,7 @@ import {
   runPurchasePlan,
   savePurchaseSchedule,
   saveSupplier,
+  setSupplierActive,
   scheduleSchema,
   supplierSchema,
   updateIngredientPurchasing,
@@ -46,6 +47,10 @@ export async function runPurchasePlanAction(input: { horizon_days: number }) {
 
 export async function saveSupplierAction(input: z.input<typeof supplierSchema>) {
   return done(await runAction(ADMIN, withComprador((ctx) => saveSupplier(ctx, input))));
+}
+
+export async function setSupplierActiveAction(id: string, isActive: boolean) {
+  return done(await runAction(ADMIN, withComprador((ctx) => setSupplierActive(ctx, id, isActive))));
 }
 
 export async function deleteSupplierAction(id: string) {
