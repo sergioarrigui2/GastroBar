@@ -89,6 +89,11 @@ export function StaffManager({ staff, currentUserId, pins }: { staff: Profile[];
                 ))}
               </div>
             </fieldset>
+            {access === 'pin' && (
+              <p className="text-xs text-zinc-500">
+                ¿Otro administrador? Elige <b>Con correo</b>: los administradores siempre entran con correo y contraseña.
+              </p>
+            )}
             <div>
               <Label htmlFor="full_name">Nombre</Label>
               <Input id="full_name" name="full_name" required />

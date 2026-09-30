@@ -1,6 +1,7 @@
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { TenantAdmins } from '@/components/platform/TenantAdmins';
 import { TenantControls } from '@/components/platform/TenantControls';
 import { Card } from '@/components/ui/primitives';
 import { requirePlatformAdmin } from '@/lib/platform/auth';
@@ -45,17 +46,7 @@ export default async function TenantPage({ params }: { params: Promise<{ id: str
           />
         </div>
         <div className="space-y-4 lg:col-span-2">
-          <Card className="space-y-2">
-            <h2 className="font-semibold">Administradores</h2>
-            <ul className="space-y-1 text-sm">
-              {detail.owners.map((o) => (
-                <li key={o.id}>
-                  <b>{o.full_name}</b> <span className="text-zinc-500">{o.email ?? '—'}</span>
-                  {!o.is_active && <span className="ml-1 text-xs text-red-600">(inactivo)</span>}
-                </li>
-              ))}
-            </ul>
-          </Card>
+          <TenantAdmins tenantId={tenant.id} owners={detail.owners} />
           <Card className="space-y-1">
             <h2 className="font-semibold">IA este mes</h2>
             <p className="text-2xl font-bold tabular-nums">{usd(detail.aiCostMonth, 3)}</p>

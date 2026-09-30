@@ -1,18 +1,24 @@
 'use server';
 
+import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import type { z } from 'zod';
 import { toUserMessage } from '@/lib/errors';
 import { assertPlatformAdmin } from '@/lib/platform/auth';
 import {
+  addTenantAdmin,
   type agentEntriesSchema,
   createTenant,
   type createTenantSchema,
+  sendTenantAdminRecovery,
+  setTenantAdminActive,
+  setTenantAdminPassword,
   setTenantAgents,
   setTenantNotes,
   setTenantPlan,
   setTenantStatus,
   type tenantPlanSchema,
+  updateTenantAdmin,
 } from '@/lib/platform/service';
 import type { ActionResult } from '@/types/domain';
 
@@ -48,4 +54,28 @@ export async function setTenantPlanAction(tenantId: string, input: z.input<typeo
 
 export async function setTenantNotesAction(tenantId: string, notes: string) {
   return platformAction(() => setTenantNotes(tenantId, notes), tenantId);
+}
+
+export async function addTenantAdminAction(tenantId: string, input: { full_name: string; email: string; password: string }) {
+  return platformAction(() => addTenantAdmin(tenantId, input), tenantId);
+}
+
+export async function updateTenantAdminAction(tenantId: string, profileId: string, input: { full_name: string; email: string }) {
+  return platformAction(() => updateTenantAdmin(tenantId, profileId, input), tenantId);
+}
+
+export async function setTenantAdminPasswordAction(tenantId: string, profileId: string, password: string) {
+  return platformAction(() => setTenantAdminPassword(tenantId, profileId, password), tenantId);
+}
+
+export async function sendTenantAdminRecoveryAction(tenantId: string, profileId: string) {
+  return platformAction(async () => {
+    const h = await headers();
+    const origin = h.get('origin') ?? `${h.get('x-forwarded-proto') ?? 'https'}://${h.get('x-forwarded-host') ?? h.get('host')}`;
+    return sendTenantAdminRecovery(tenantId, profileId, origin);
+  }, tenantId);
+}
+
+export async function setTenantAdminActiveAction(tenantId: string, profileId: string, active: boolean) {
+  return platformAction(() => setTenantAdminActive(tenantId, profileId, active), tenantId);
 }

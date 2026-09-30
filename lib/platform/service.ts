@@ -226,3 +226,106 @@ export async function getTenantDetail(tenantId: string) {
 }
 
 export const PLAN_OPTIONS = Object.values(AI_PLANS);
+
+// ─── Administradores de cada gastrobar (sólo superusuario) ─────────────────────
+
+const adminEmail = z.email('Correo inválido').trim().toLowerCase();
+const adminPassword = z.string().min(10, 'La contraseña debe tener mínimo 10 caracteres').max(72);
+const adminName = z.string().trim().min(2, 'Escribe el nombre').max(120);
+
+const authError = (error: { code?: string; message?: string } | null) =>
+  new Error(
+    error?.code === 'email_exists' || /already/i.test(error?.message ?? '')
+      ? 'Ya existe un usuario con ese correo'
+      : `No se pudo completar: ${error?.message ?? 'error desconocido'}`,
+  );
+
+/** El perfil debe ser administrador de ESE gastrobar (nunca de otro). */
+async function tenantAdminProfile(tenantId: string, profileId: string) {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from('profiles')
+    .select('id, full_name, is_active')
+    .eq('tenant_id', z.uuid().parse(tenantId))
+    .eq('id', z.uuid().parse(profileId))
+    .eq('role', 'admin')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('Ese administrador no pertenece a este gastrobar');
+  return data;
+}
+
+export async function addTenantAdmin(tenantId: string, input: { full_name: string; email: string; password: string }) {
+  const id = z.uuid().parse(tenantId);
+  const data = { full_name: adminName.parse(input.full_name), email: adminEmail.parse(input.email), password: adminPassword.parse(input.password) };
+  const admin = createSupabaseAdminClient();
+  const { data: tenant } = await admin.from('tenants').select('id').eq('id', id).maybeSingle();
+  if (!tenant) throw new Error('Gastrobar no encontrado');
+  const { data: created, error } = await admin.auth.admin.createUser({
+    email: data.email,
+    password: data.password,
+    email_confirm: true,
+    user_metadata: { full_name: data.full_name },
+  });
+  if (error || !created.user) throw authError(error);
+  const { error: profileError } = await admin.from('profiles').insert({ id: created.user.id, tenant_id: id, role: 'admin', full_name: data.full_name });
+  if (profileError) {
+    await admin.auth.admin.deleteUser(created.user.id);
+    throw profileError;
+  }
+}
+
+export async function updateTenantAdmin(tenantId: string, profileId: string, input: { full_name: string; email: string }) {
+  const profile = await tenantAdminProfile(tenantId, profileId);
+  const full_name = adminName.parse(input.full_name);
+  const email = adminEmail.parse(input.email);
+  const admin = createSupabaseAdminClient();
+  const { data: current } = await admin.auth.admin.getUserById(profile.id);
+  if (current.user?.email !== email) {
+    // El correo nuevo queda confirmado de inmediato; el anterior deja de servir para entrar.
+    const { error } = await admin.auth.admin.updateUserById(profile.id, { email, email_confirm: true });
+    if (error) throw authError(error);
+  }
+  if (full_name !== profile.full_name) {
+    const { error } = await admin.from('profiles').update({ full_name }).eq('id', profile.id).eq('tenant_id', tenantId);
+    if (error) throw error;
+    await admin.auth.admin.updateUserById(profile.id, { user_metadata: { full_name } });
+  }
+}
+
+/** Contraseña temporal para dictarla por teléfono; el administrador la cambia luego desde "¿Olvidaste tu contraseña?". */
+export async function setTenantAdminPassword(tenantId: string, profileId: string, password: string) {
+  const profile = await tenantAdminProfile(tenantId, profileId);
+  const { error } = await createSupabaseAdminClient().auth.admin.updateUserById(profile.id, { password: adminPassword.parse(password) });
+  if (error) throw authError(error);
+}
+
+/** Envía el correo de recuperación de contraseña al administrador. */
+export async function sendTenantAdminRecovery(tenantId: string, profileId: string, origin: string) {
+  const profile = await tenantAdminProfile(tenantId, profileId);
+  const admin = createSupabaseAdminClient();
+  const { data } = await admin.auth.admin.getUserById(profile.id);
+  const email = data.user?.email;
+  if (!email) throw new Error('El administrador no tiene correo registrado');
+  const { error } = await admin.auth.resetPasswordForEmail(email, { redirectTo: `${origin}/auth/callback?next=/auth/reset` });
+  if (error) throw new Error(error.status === 429 ? 'Supabase limita los correos seguidos: espera unos minutos.' : error.message);
+  return email;
+}
+
+/** Activa o desactiva un administrador; siempre debe quedar al menos uno activo. */
+export async function setTenantAdminActive(tenantId: string, profileId: string, active: boolean) {
+  const profile = await tenantAdminProfile(tenantId, profileId);
+  const admin = createSupabaseAdminClient();
+  if (!active) {
+    const { count } = await admin
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
+      .eq('role', 'admin')
+      .eq('is_active', true)
+      .neq('id', profile.id);
+    if (!count) throw new Error('No puedes desactivar al único administrador activo. Agrega otro primero.');
+  }
+  const { error } = await admin.from('profiles').update({ is_active: active }).eq('id', profile.id).eq('tenant_id', tenantId);
+  if (error) throw error;
+}
