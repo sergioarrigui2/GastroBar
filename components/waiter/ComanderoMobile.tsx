@@ -42,6 +42,8 @@ import { signOutAction } from '@/app/actions/auth';
 import { DiscountSheet } from '@/components/billing/DiscountSheet';
 import { PaymentsList } from '@/components/billing/PaymentsList';
 import { SplitBillModal } from '@/components/billing/SplitBillModal';
+import { printBillAction } from '@/app/actions/printing';
+import { printOrFallback } from '@/components/print/printOrFallback';
 import { TransferSheet } from '@/components/waiter/TransferSheet';
 import { useOrderOutbox } from '@/components/waiter/useOrderOutbox';
 import { Badge, Button, Stepper } from '@/components/ui/primitives';
@@ -1050,7 +1052,12 @@ function BillView({
       </dl>
 
       <div className="grid grid-cols-2 gap-2">
-        <Button variant="secondary" onClick={() => window.open(`/print/bill/${order.id}?auto=1`, '_blank', 'width=420,height=720')}>
+        <Button
+          variant="secondary"
+          onClick={() =>
+            void printOrFallback(() => printBillAction(order.id), `/print/bill/${order.id}?auto=1`).then((msg) => msg && notify(msg))
+          }
+        >
           <Printer className="size-4" /> Precuenta
         </Button>
         {canManage ? (

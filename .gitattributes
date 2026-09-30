@@ -2,3 +2,5 @@
 *.png binary
 *.jpg binary
 *.webp binary
+# Los .bat deben conservar CRLF para ejecutarse bien en Windows (se descargan desde /descargas).
+*.bat text eol=crlf

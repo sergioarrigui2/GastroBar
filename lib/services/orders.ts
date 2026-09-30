@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { after } from 'next/server';
+import { enqueueOrderTickets, safely } from '@/lib/printing/enqueue';
 import type { TenantContext } from '@/lib/tenant-context';
 import {
   itemCompSchema,
@@ -30,7 +32,12 @@ export async function submitOrder(ctx: TenantContext, input: SubmitOrderInput): 
     p_client_id: data.client_id ?? null,
   });
   if (error) throw error;
-  return result as unknown as SubmitOrderResult;
+  const submitted = result as unknown as SubmitOrderResult;
+  // Comanda a cocina / barra en segundo plano. Un reintento (duplicate) ya se imprimió.
+  if (!submitted.duplicate) {
+    after(() => safely('comanda', () => enqueueOrderTickets(ctx, submitted.order_id, submitted.round)));
+  }
+  return submitted;
 }
 
 export async function updateItemsStatus(ctx: TenantContext, input: UpdateItemsStatusInput): Promise<number> {

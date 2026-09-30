@@ -12,3 +12,6 @@ next-env.d.ts
 
 # Importaciones de datos de clientes (nunca al repositorio)
 tmp-import/
+
+# Vinculación local de GastroBar Print (contiene su token)
+gastrobar-print.json

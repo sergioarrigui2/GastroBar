@@ -275,6 +275,62 @@ type StaffPinRow = {
   updated_at: string;
 };
 
+type PrintStationRow = {
+  id: string;
+  tenant_id: string;
+  name: string;
+  token_hash: string | null;
+  pairing_code_hash: string | null;
+  pairing_expires_at: string | null;
+  paired_at: string | null;
+  last_seen_at: string | null;
+  agent_version: string | null;
+  discovered: Json;
+  revoked_at: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+type PrinterRow = {
+  id: string;
+  tenant_id: string;
+  station_id: string;
+  name: string;
+  connection: 'windows' | 'network';
+  target: string;
+  paper_width: 58 | 80;
+  profile: string;
+  codepage: 'cp850' | 'cp1252' | 'ascii';
+  mode: 'escpos' | 'text';
+  cut: boolean;
+  is_active: boolean;
+  status: 'unknown' | 'ok' | 'error';
+  status_message: string | null;
+  status_at: string | null;
+  created_at: string;
+};
+
+type PrintSettingsRow = { tenant_id: string; routes: Json; category_overrides: Json; options: Json; updated_at: string };
+
+type PrintJobRow = {
+  id: string;
+  tenant_id: string;
+  printer_id: string;
+  document: 'kitchen_order' | 'bar_order' | 'prebill' | 'receipt' | 'cash_report' | 'test';
+  ref_id: string | null;
+  title: string;
+  payload: Json;
+  copies: number;
+  open_drawer: boolean;
+  status: 'pending' | 'printing' | 'printed' | 'failed';
+  attempts: number;
+  error: string | null;
+  created_by: string | null;
+  created_at: string;
+  claimed_at: string | null;
+  printed_at: string | null;
+};
+
 type ApiKeyRow = {
   id: string;
   tenant_id: string;
@@ -529,6 +585,10 @@ export type Database = {
       inventory_movements: Table<InventoryMovementRow, 'ingredient_id' | 'movement_type' | 'quantity'>;
       api_keys: Table<ApiKeyRow, 'profile_id' | 'name' | 'key_prefix' | 'key_hash'>;
       terminal_devices: Table<TerminalDeviceRow, 'name' | 'token_hash'>;
+      print_stations: Table<PrintStationRow, 'name'>;
+      printers: Table<PrinterRow, 'station_id' | 'name' | 'connection' | 'target'>;
+      print_settings: Table<PrintSettingsRow, never>;
+      print_jobs: Table<PrintJobRow, 'printer_id' | 'document' | 'title' | 'payload'>;
       order_submissions: Table<{ client_id: string; tenant_id: string; result: Json; created_by: string | null; created_at: string }, 'client_id' | 'result'>;
       staff_pins: Table<StaffPinRow, 'profile_id' | 'tenant_id' | 'pin_hash'>;
       cash_sessions: Table<CashSessionRow, never>;

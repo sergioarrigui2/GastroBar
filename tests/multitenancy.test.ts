@@ -114,6 +114,10 @@ async function seedTenant(n: number, slug: string): Promise<Tenant> {
   await superuser(`insert into public.tenant_ai_plans (tenant_id, plan) values ($1, 'pro')`, [id]);
   await rows(A, `insert into terminal_devices (name, token_hash) values ('Tablet salón', 'th_${slug}')`);
   await rows(A, `insert into order_submissions (client_id, result) values (gen_random_uuid(), '{}')`);
+  const station = (await first<{ id: string }>(A, `insert into print_stations (name, token_hash) values ('PC caja', encode(sha256(convert_to('tok-${slug}', 'UTF8')), 'hex')) returning id`)).id;
+  const printer = (await first<{ id: string }>(A, `insert into printers (station_id, name, connection, target) values ($1, 'Cocina', 'network', '10.0.0.5') returning id`, [station])).id;
+  await rows(A, `insert into print_settings (routes) values (jsonb_build_object('kitchen_order', $1::text))`, [printer]);
+  await rows(users.waiter, `insert into print_jobs (printer_id, document, title, payload) values ($1, 'kitchen_order', 'Comanda', '{"blocks":[]}')`, [printer]);
   await superuser(`insert into public.staff_pins (profile_id, tenant_id, pin_hash) values ($1, $2, 'scrypt$1$x$y')`, [users.waiter, id]);
   await superuser(`insert into public.tenant_agents (tenant_id, agent, enabled) values ($1, 'vigia', true), ($1, 'comprador', true)`, [id]);
 

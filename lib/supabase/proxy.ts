@@ -7,7 +7,8 @@ import type { Database } from '@/types/database';
 /** /m/* es el menú QR público para clientes. */
 /** /api/cron valida su propio secreto (CRON_SECRET). */
 /** /terminal es la pantalla de PIN de las tablets compartidas (valida su propia cookie). */
-const PUBLIC_PATHS = ['/login', '/onboarding', '/auth', '/api/v1', '/api/cron', '/m', '/terminal'];
+/** /api/print y /descargas: el programa GastroBar Print (se autentica con su código / token). */
+const PUBLIC_PATHS = ['/login', '/onboarding', '/auth', '/api/v1', '/api/cron', '/api/print', '/descargas', '/m', '/terminal'];
 
 /** Refresca la sesión de Supabase en cada request y protege las rutas privadas. */
 export async function updateSession(request: NextRequest): Promise<NextResponse> {

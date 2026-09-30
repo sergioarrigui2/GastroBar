@@ -40,6 +40,16 @@ async function as<T = Record<string, unknown>>(uid: string, sql: string, params:
 const one = async <T = Record<string, unknown>>(uid: string, sql: string, params: unknown[] = []) =>
   (await as<T>(uid, sql, params))[0]!;
 
+/** Como el programa GastroBar Print: rol anon, sin usuario. */
+async function anon<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
+  await db.exec(`reset role; select set_config('request.jwt.claim.sub', '', false); set role anon;`);
+  try {
+    return (await db.query<T>(sql, params)).rows;
+  } finally {
+    await db.exec('reset role');
+  }
+}
+
 const ids = {} as Record<string, string>;
 
 before(async () => {
@@ -839,5 +849,55 @@ describe('comandas sin conexión', () => {
     // Otro gastrobar no ve los envíos de A.
     const [b] = await as<{ n: number }>(ADMIN_B, `select count(*)::int as n from order_submissions`);
     assert.equal(b!.n, 0);
+  });
+});
+
+describe('impresión: estación, cola y aislamiento', () => {
+  test('vincular con código, recibir trabajos sólo de sus impresoras, reportar y revocar', async () => {
+    const hash = (s: string) => `encode(sha256(convert_to('${s}', 'UTF8')), 'hex')`;
+    // El admin crea la estación con un código (así lo hace la acción del servidor).
+    const station = (await one<{ id: string }>(ADMIN_A, `insert into print_stations (name, pairing_code_hash, pairing_expires_at) values ('PC caja', ${hash('ABCD2345')}, now() + interval '15 minutes') returning id`)).id;
+    assert.equal((await as(WAITER_A, `select * from print_stations`)).length, 0, 'sólo el admin ve las estaciones');
+
+    // El programa (anónimo) vincula con el código —con o sin guion— y recibe su token una sola vez.
+    await assert.rejects(anon(`select public.print_agent_pair('ZZZZ-9999', 'PC')`), /invalid_pairing_code/);
+    const [paired] = await anon<{ r: { token: string; station_id: string } }>(`select public.print_agent_pair('abcd-2345', 'PC-ELPUNTO') as r`);
+    const token = paired!.r.token;
+    assert.equal(paired!.r.station_id, station);
+    await assert.rejects(anon(`select public.print_agent_pair('ABCD2345', 'otro')`), /invalid_pairing_code/, 'el código es de un solo uso');
+
+    const cocina = (await one<{ id: string }>(ADMIN_A, `insert into printers (station_id, name, connection, target, paper_width) values ($1, 'Cocina', 'windows', 'SAT15TUS', 80) returning id`, [station])).id;
+    const [hb] = await anon<{ r: { printers: Array<{ name: string; codepage: string }> } }>(`select public.print_agent_heartbeat($1, '1.0.0', '[{"name":"SAT15TUS"}]'::jsonb) as r`, [token]);
+    assert.deepEqual(hb!.r.printers.map((p) => [p.name, p.codepage]), [['Cocina', 'cp850']]);
+
+    // El mesero encola; el mesero no puede leer la cola.
+    await as(WAITER_A, `insert into print_jobs (printer_id, document, title, payload) values ($1, 'kitchen_order', 'Comanda Mesa 1', '{"blocks":[]}')`, [cocina]);
+    assert.equal((await as(WAITER_A, `select * from print_jobs`)).length, 0);
+
+    // Otro gastrobar no puede mandar trabajos a esta impresora.
+    await assert.rejects(as(ADMIN_B, `insert into print_jobs (printer_id, document, title, payload) values ($1, 'test', 'X', '{}')`, [cocina]));
+
+    // El programa toma el trabajo (una sola vez), falla, se reintenta y luego sale.
+    const [pull] = await anon<{ r: Array<{ id: string; title: string }> }>(`select public.print_agent_pull($1) as r`, [token]);
+    assert.equal(pull!.r.length, 1);
+    const jobId = pull!.r[0]!.id;
+    const [again] = await anon<{ r: unknown[] }>(`select public.print_agent_pull($1) as r`, [token]);
+    assert.equal(again!.r.length, 0, 'no se entrega dos veces');
+    await anon(`select public.print_agent_report($1, $2, false, 'Sin papel')`, [token, jobId]);
+    let job = await one<{ status: string; error: string }>(ADMIN_A, `select status, error from print_jobs where id = $1`, [jobId]);
+    assert.deepEqual(job, { status: 'pending', error: 'Sin papel' });
+    const printer = await one<{ status: string }>(ADMIN_A, `select status from printers where id = $1`, [cocina]);
+    assert.equal(printer.status, 'error');
+    await anon(`select public.print_agent_pull($1)`, [token]);
+    await anon(`select public.print_agent_report($1, $2, true)`, [token, jobId]);
+    job = await one(ADMIN_A, `select status, error from print_jobs where id = $1`, [jobId]);
+    assert.deepEqual(job, { status: 'printed', error: null });
+
+    // Token falso o estación revocada: no entra.
+    await assert.rejects(anon(`select public.print_agent_pull('token-falso')`), /invalid_print_token/);
+    await as(ADMIN_A, `update print_stations set revoked_at = now() where id = $1`, [station]);
+    await assert.rejects(anon(`select public.print_agent_pull($1)`, [token]), /invalid_print_token/);
+    // Con sesión de usuario tampoco se leen las tablas de estaciones de otro gastrobar.
+    assert.equal((await as(ADMIN_B, `select * from print_stations`)).length, 0);
   });
 });

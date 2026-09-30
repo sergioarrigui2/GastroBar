@@ -1,6 +1,8 @@
 'use client';
 
 import { Bot, ChefHat, Expand, Martini, Printer, RotateCcw, Shrink, Volume2, VolumeX, WifiOff } from 'lucide-react';
+import { printOrderTicketAction } from '@/app/actions/printing';
+import { printOrFallback } from '@/components/print/printOrFallback';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { getKdsTicketsAction, updateItemsStatusAction } from '@/app/actions/orders';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
@@ -239,10 +241,9 @@ export function KDSDisplay({
                   <span suppressHydrationWarning className="tabular ml-auto text-xl font-black">{formatElapsed(ticket.createdAt, now)}</span>
                   <button
                     onClick={() =>
-                      window.open(
+                      void printOrFallback(
+                        () => printOrderTicketAction({ orderId: ticket.orderId, station, round: ticket.round }),
                         `/print/order/${ticket.orderId}?station=${station}&round=${ticket.round}&auto=1`,
-                        '_blank',
-                        'width=420,height=720',
                       )
                     }
                     aria-label="Imprimir comanda"

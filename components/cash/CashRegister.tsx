@@ -8,6 +8,8 @@ import { addCashMovementAction, closeCashSessionAction, openCashSessionAction } 
 import { getBillByOrderAction } from '@/app/actions/orders';
 import { PaymentsList } from '@/components/billing/PaymentsList';
 import { FlashMessage, toNumber, useAdminMutation } from '@/components/admin/useAdminMutation';
+import { printBillAction, printCashReportAction } from '@/app/actions/printing';
+import { printOrFallback } from '@/components/print/printOrFallback';
 import { Button, Card, Input, Label } from '@/components/ui/primitives';
 import { Sheet } from '@/components/ui/Sheet';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
@@ -19,6 +21,8 @@ import type { AppRole, PaymentMethod, TableBill } from '@/types/domain';
 const METHOD: Record<PaymentMethod, string> = { cash: 'Efectivo', card: 'Tarjeta', transfer: 'Transferencia', other: 'Otro' };
 
 const openPrint = (path: string) => window.open(`${path}?auto=1`, '_blank', 'noopener,width=420,height=720');
+const printBill = (orderId: string) => void printOrFallback(() => printBillAction(orderId), `/print/bill/${orderId}?auto=1`);
+const printCash = (sessionId: string) => void printOrFallback(() => printCashReportAction(sessionId), `/print/cash/${sessionId}?auto=1`);
 
 export function CashRegister({
   tenant,
@@ -171,7 +175,7 @@ export function CashRegister({
                   </div>
                 )}
               </dl>
-              <Button variant="secondary" className="mt-4 w-full" onClick={() => openPrint(`/print/cash/${session.id}`)}>
+              <Button variant="secondary" className="mt-4 w-full" onClick={() => printCash(session.id)}>
                 <Printer className="size-4" /> Imprimir corte parcial (X)
               </Button>
             </Card>
@@ -247,7 +251,7 @@ export function CashRegister({
                       <Button variant="ghost" size="sm" aria-label={`Ver pagos ${o.orderNumber}`} onClick={() => openBill(o.id)}>
                         <Eye className="size-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" aria-label={`Imprimir recibo ${o.orderNumber}`} onClick={() => openPrint(`/print/bill/${o.id}`)}>
+                      <Button variant="ghost" size="sm" aria-label={`Imprimir recibo ${o.orderNumber}`} onClick={() => printBill(o.id)}>
                         <Printer className="size-4" />
                       </Button>
                     </li>
@@ -288,10 +292,10 @@ export function CashRegister({
                   run(
                     () => closeCashSessionAction({ counted_cash: countedValue, notes: notes || undefined }),
                     'Caja cerrada',
-                    (sessionId) => {
+                    ({ sessionId, printed }) => {
                       setCounted('');
                       setNotes('');
-                      openPrint(`/print/cash/${sessionId}`);
+                      if (!printed) openPrint(`/print/cash/${sessionId}`);
                     },
                   );
                 }}
@@ -337,7 +341,7 @@ export function CashRegister({
                       {money(h.difference ?? 0)}
                     </td>
                     <td className="px-2 py-2 text-right">
-                      <Button variant="ghost" size="sm" aria-label="Imprimir reporte Z" onClick={() => openPrint(`/print/cash/${h.id}`)}>
+                      <Button variant="ghost" size="sm" aria-label="Imprimir reporte Z" onClick={() => printCash(h.id)}>
                         <Printer className="size-4" />
                       </Button>
                     </td>

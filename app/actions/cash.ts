@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { runAction } from '@/lib/actions';
+import { enqueueCashReport, printSettingsFor, safely } from '@/lib/printing/enqueue';
 import {
   addCashMovement,
   closeCashSession,
@@ -29,5 +30,12 @@ export async function addCashMovementAction(input: z.input<typeof cashMovementSc
 }
 
 export async function closeCashSessionAction(input: z.input<typeof closeCashSchema>) {
-  return cashMutation((ctx) => closeCashSession(ctx, input));
+  return cashMutation(async (ctx) => {
+    const sessionId = await closeCashSession(ctx, input);
+    const queued = await safely('cierre de caja', async () => {
+      const { options } = await printSettingsFor(ctx);
+      return options.cash_report_on_close ? (await enqueueCashReport(ctx, sessionId)).queued : false;
+    });
+    return { sessionId, printed: Boolean(queued) };
+  });
 }
