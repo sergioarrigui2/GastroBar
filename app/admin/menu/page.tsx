@@ -6,9 +6,9 @@ import { requirePageRole } from '@/lib/tenant-context';
 
 export const metadata = { title: 'Menú' };
 
-export default async function MenuPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+export default async function MenuPage({ searchParams }: { searchParams: Promise<{ tab?: string; open?: string }> }) {
   const ctx = await requirePageRole(['admin']);
-  const [catalog, { tab }, menu] = await Promise.all([getCatalog(ctx), searchParams, getMenuInsights(ctx)]);
+  const [catalog, { tab, open }, menu] = await Promise.all([getCatalog(ctx), searchParams, getMenuInsights(ctx)]);
   return (
     <>
       <AgentNotice agent="ingeniero" headline="lo que veo en tu carta (30 días)" items={menu.notice} />
@@ -20,6 +20,7 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
         locale={ctx.tenant.locale}
         initialTab={tab === 'categories' || tab === 'modifiers' || tab === 'sub-recipes' ? tab : 'products'}
         insights={menu.insights}
+        openId={open}
       />
     </>
   );

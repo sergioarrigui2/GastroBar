@@ -6,6 +6,7 @@ import { runAction } from '@/lib/actions';
 import {
   createTablesBulk,
   deleteEntity,
+  getIngredientUsage,
   isDeletableEntity,
   saveCategory,
   saveIngredient,
@@ -83,6 +84,11 @@ export async function saveTableAction(input: TableInput) {
 
 export async function createTablesBulkAction(input: BulkTablesInput) {
   return adminMutation((ctx) => createTablesBulk(ctx, input));
+}
+
+/** Dónde se usa un insumo (sólo lectura: no revalida el catálogo). */
+export async function getIngredientUsageAction(ingredientId: string) {
+  return runAction(ADMIN, (ctx) => getIngredientUsage(ctx, z.uuid().parse(ingredientId)));
 }
 
 export async function deleteEntityAction(entity: string, id: string) {

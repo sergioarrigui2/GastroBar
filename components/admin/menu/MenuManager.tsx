@@ -37,6 +37,7 @@ export function MenuManager({
   locale,
   initialTab,
   insights,
+  openId,
 }: {
   tenantId: string;
   tax: CatalogLookups['tax'];
@@ -45,8 +46,12 @@ export function MenuManager({
   locale: string;
   initialTab: Tab;
   insights?: Record<string, MenuInsight>;
+  /** Abre directamente el editor de ese producto o sub-receta (enlaces desde Inventario). */
+  openId?: string;
 }) {
-  const [tab, setTab] = useState<Tab>(initialTab);
+  const [tab, setTab] = useState<Tab>(
+    openId && catalog.subRecipes.some((s) => s.id === openId) ? 'sub-recipes' : initialTab,
+  );
 
   const lookups = useMemo<CatalogLookups>(
     () => ({
@@ -91,10 +96,10 @@ export function MenuManager({
         </nav>
       </div>
 
-      {tab === 'products' && <ProductsPanel catalog={catalog} lookups={lookups} insights={insights} />}
+      {tab === 'products' && <ProductsPanel catalog={catalog} lookups={lookups} insights={insights} openId={openId} />}
       {tab === 'categories' && <CategoriesPanel catalog={catalog} />}
       {tab === 'modifiers' && <ModifiersPanel catalog={catalog} lookups={lookups} />}
-      {tab === 'sub-recipes' && <SubRecipesPanel catalog={catalog} lookups={lookups} />}
+      {tab === 'sub-recipes' && <SubRecipesPanel catalog={catalog} lookups={lookups} openId={openId} />}
     </div>
   );
 }

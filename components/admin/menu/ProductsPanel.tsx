@@ -46,17 +46,19 @@ export function ProductsPanel({
   catalog,
   lookups,
   insights = {},
+  openId,
 }: {
   catalog: CatalogSnapshot;
   lookups: CatalogLookups;
   /** Clasificación del Ingeniero de menú (últimos 30 días) por producto. */
   insights?: Record<string, MenuInsight>;
+  openId?: string;
 }) {
   const { money, ingredientMap, subRecipeMap } = lookups;
   const { pending, flash, run } = useAdminMutation();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
-  const [editing, setEditing] = useState<Product | 'new' | null>(null);
+  const [editing, setEditing] = useState<Product | 'new' | null>(() => catalog.products.find((p) => p.id === openId) ?? null);
 
   const categories = useMemo(() => new Map(catalog.categories.map((c) => [c.id, c])), [catalog.categories]);
   const recipesByProduct = useMemo(() => {

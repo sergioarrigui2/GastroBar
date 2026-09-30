@@ -207,7 +207,47 @@ export function isDeletableEntity(value: string): value is DeletableEntity {
   return (DELETABLE as readonly string[]).includes(value);
 }
 
+export type IngredientUsage = {
+  products: Array<{ id: string; name: string; is_active: boolean }>;
+  subRecipes: Array<{ id: string; name: string }>;
+};
+
+/** Productos (receta directa) y sub-recetas que usan un insumo: lo que impide borrarlo. */
+export async function getIngredientUsage(ctx: TenantContext, ingredientId: string): Promise<IngredientUsage> {
+  const [recipesRes, subRes] = await Promise.all([
+    ctx.supabase.from('recipes').select('product_id').eq('tenant_id', ctx.tenant.id).eq('ingredient_id', ingredientId),
+    ctx.supabase.from('sub_recipe_ingredients').select('sub_recipe_id').eq('tenant_id', ctx.tenant.id).eq('ingredient_id', ingredientId),
+  ]);
+  if (recipesRes.error) throw recipesRes.error;
+  if (subRes.error) throw subRes.error;
+  const productIds = [...new Set(recipesRes.data.map((r) => r.product_id))];
+  const subIds = [...new Set(subRes.data.map((r) => r.sub_recipe_id))];
+
+  const [productsRes, subRecipesRes] = await Promise.all([
+    productIds.length
+      ? ctx.supabase.from('products').select('id, name, is_active').eq('tenant_id', ctx.tenant.id).in('id', productIds).order('name')
+      : Promise.resolve({ data: [], error: null }),
+    subIds.length
+      ? ctx.supabase.from('sub_recipes').select('id, name').eq('tenant_id', ctx.tenant.id).in('id', subIds).order('name')
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (productsRes.error) throw productsRes.error;
+  if (subRecipesRes.error) throw subRecipesRes.error;
+  return { products: productsRes.data ?? [], subRecipes: subRecipesRes.data ?? [] };
+}
+
+export function describeUsage(usage: IngredientUsage, max = 5): string {
+  const names = [...usage.products.map((p) => p.name), ...usage.subRecipes.map((s) => `${s.name} (sub-receta)`)];
+  return names.slice(0, max).join(', ') + (names.length > max ? ` y ${names.length - max} más` : '');
+}
+
 export async function deleteEntity(ctx: TenantContext, entity: DeletableEntity, id: string) {
+  if (entity === 'ingredients') {
+    const usage = await getIngredientUsage(ctx, id);
+    if (usage.products.length || usage.subRecipes.length) {
+      throw new Error(`No se puede eliminar: se usa en ${describeUsage(usage)}. Quítalo primero de esas recetas.`);
+    }
+  }
   const { error, count } = await ctx.supabase
     .from(entity)
     .delete({ count: 'exact' })

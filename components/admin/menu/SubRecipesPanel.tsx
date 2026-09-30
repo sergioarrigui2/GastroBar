@@ -16,9 +16,9 @@ import { linesToRecipe, newLineKey, RecipeEditor, type DraftLine } from './Recip
 type SubRecipe = CatalogSnapshot['subRecipes'][number];
 const UNIT: Record<MeasureUnit, string> = { g: 'g', ml: 'ml', unit: 'u' };
 
-export function SubRecipesPanel({ catalog, lookups }: { catalog: CatalogSnapshot; lookups: CatalogLookups }) {
+export function SubRecipesPanel({ catalog, lookups, openId }: { catalog: CatalogSnapshot; lookups: CatalogLookups; openId?: string }) {
   const { money, ingredientMap } = lookups;
-  const [editing, setEditing] = useState<SubRecipe | 'new' | null>(null);
+  const [editing, setEditing] = useState<SubRecipe | 'new' | null>(() => catalog.subRecipes.find((s) => s.id === openId) ?? null);
   const usage = new Map<string, number>();
   for (const r of catalog.recipes) if (r.sub_recipe_id) usage.set(r.sub_recipe_id, (usage.get(r.sub_recipe_id) ?? 0) + 1);
 

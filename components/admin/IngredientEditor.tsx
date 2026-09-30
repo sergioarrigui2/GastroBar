@@ -1,8 +1,10 @@
 'use client';
 
-import { Trash2 } from 'lucide-react';
-import { useState } from 'react';
-import { deleteEntityAction, saveIngredientAction } from '@/app/actions/catalog';
+import { ExternalLink, Trash2 } from 'lucide-react';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { deleteEntityAction, getIngredientUsageAction, saveIngredientAction } from '@/app/actions/catalog';
+import type { IngredientUsage } from '@/lib/services/catalog';
 import { Button, Input, Label, Select } from '@/components/ui/primitives';
 import { Sheet } from '@/components/ui/Sheet';
 import type { MeasureUnit } from '@/types/database';
@@ -32,6 +34,19 @@ export function IngredientEditor({
   const [minStock, setMinStock] = useState(ingredient ? String(ingredient.min_stock) : '0');
   const [initialStock, setInitialStock] = useState('0');
   const [isLiquor, setIsLiquor] = useState(ingredient?.is_liquor ?? false);
+  const [usage, setUsage] = useState<IngredientUsage | null>(null);
+
+  useEffect(() => {
+    if (!ingredient) return;
+    let alive = true;
+    void getIngredientUsageAction(ingredient.id).then((r) => {
+      if (alive && r.ok) setUsage(r.data);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [ingredient]);
+  const usedIn = usage ? usage.products.length + usage.subRecipes.length : 0;
 
   const save = () => {
     setError(null);
@@ -73,8 +88,9 @@ export function IngredientEditor({
               <Button
                 variant="ghost"
                 className="text-red-600"
-                disabled={pending}
-                onClick={() => confirm(`¿Eliminar "${ingredient.name}"? Si está en alguna receta no se podrá.`) && run(() => deleteEntityAction('ingredients', ingredient.id), 'Insumo eliminado', onClose)}
+                disabled={pending || !usage || usedIn > 0}
+                title={usedIn > 0 ? 'Quítalo primero de las recetas que lo usan' : undefined}
+                onClick={() => confirm(`¿Eliminar "${ingredient.name}"?`) && run(() => deleteEntityAction('ingredients', ingredient.id), 'Insumo eliminado', onClose)}
               >
                 <Trash2 className="size-4" /> Eliminar
               </Button>
@@ -127,6 +143,47 @@ export function IngredientEditor({
           Es licor (aparece en el filtro "Licores")
         </label>
       </div>
+      {ingredient && (
+        <section className="mt-5 border-t border-zinc-200 pt-4 dark:border-zinc-800" aria-labelledby="i-usage">
+          <h3 id="i-usage" className="text-sm font-semibold">
+            {!usage ? 'Buscando dónde se usa…' : usedIn === 0 ? 'No está en ninguna receta' : `Se usa en ${usedIn} receta${usedIn === 1 ? '' : 's'}`}
+          </h3>
+          {usage && usedIn === 0 && <p className="mt-1 text-xs text-zinc-500">Puedes eliminarlo sin afectar el menú.</p>}
+          {usedIn > 0 && (
+            <>
+              <p className="mt-1 text-xs text-zinc-500">
+                Para eliminarlo, ábrelas y quítalo (o cámbialo por otro insumo). Si ya no lo compras pero sigue en recetas, no lo borres: el
+                historial y los costos dependen de él.
+              </p>
+              <ul className="mt-2 flex flex-wrap gap-2">
+                {usage!.products.map((p) => (
+                  <li key={p.id}>
+                    <Link
+                      href={`/admin/menu?open=${p.id}`}
+                      className="inline-flex items-center gap-1 rounded-lg bg-zinc-100 px-2.5 py-1 text-sm hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+                    >
+                      {p.name}
+                      {!p.is_active && <span className="text-xs text-zinc-500">(inactivo)</span>}
+                      <ExternalLink className="size-3 text-zinc-400" />
+                    </Link>
+                  </li>
+                ))}
+                {usage!.subRecipes.map((sr) => (
+                  <li key={sr.id}>
+                    <Link
+                      href={`/admin/menu?tab=sub-recipes&open=${sr.id}`}
+                      className="inline-flex items-center gap-1 rounded-lg bg-sky-100 px-2.5 py-1 text-sm text-sky-900 hover:bg-sky-200 dark:bg-sky-500/15 dark:text-sky-100"
+                    >
+                      {sr.name} <span className="text-xs opacity-70">sub-receta</span>
+                      <ExternalLink className="size-3 opacity-60" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+      )}
       <FlashMessage flash={flash} />
     </Sheet>
   );
