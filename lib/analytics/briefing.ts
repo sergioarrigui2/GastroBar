@@ -10,6 +10,12 @@ export type BriefingItem = {
   action: string;
   severity: 'critical' | 'warning' | 'info';
   source: 'analista' | 'reglas' | 'comprador';
+  /** Dónde se resuelve (p. ej. inventario filtrado en stock bajo). */
+  link?: { href: string; label: string };
+};
+
+const ANOMALY_LINKS: Partial<Record<string, { href: string; label: string }>> = {
+  low_stock: { href: '/admin/inventory?filtro=bajo', label: 'Ver en inventario' },
 };
 
 export type PendingPurchase = { created_at: string; lines: number; urgent: number; total_label: string } | null;
@@ -55,7 +61,7 @@ export function buildBriefing(input: {
     // Si el Analista ya habló de lo mismo, no se repite.
     const topic = a.title.split(':')[0]!.toLowerCase();
     if (items.some((i) => i.title.toLowerCase().includes(topic))) continue;
-    items.push({ title: a.title, action: a.detail, severity: a.severity, source: 'reglas' });
+    items.push({ title: a.title, action: a.detail, severity: a.severity, source: 'reglas', link: ANOMALY_LINKS[a.kind] });
   }
 
   return items.slice(0, limit);

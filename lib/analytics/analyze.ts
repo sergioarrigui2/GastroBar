@@ -8,6 +8,9 @@ import type {
   SnapshotKpis,
 } from './types';
 
+/** Insumos que se nombran en el aviso de stock bajo (el resto va en Inventario). */
+const LOW_STOCK_SHOWN = 6;
+
 export const WEEKDAYS = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'] as const;
 
 export const MENU_CLASS_LABEL: Record<MenuClass, string> = {
@@ -241,14 +244,21 @@ export function detectAnomalies(
     }
   }
 
-  if (snapshot.inventory.low_stock.length > 0) {
+  if (snapshot.inventory.low_stock.some((i) => Number(i.min) > 0)) {
+    // Sólo cuentan los insumos con mínimo definido (sin mínimo, estar en 0 no es una alerta).
+    const low = snapshot.inventory.low_stock.map((i) => ({ ...i, stock: Number(i.stock), min: Number(i.min) })).filter((i) => i.min > 0);
+    // Más urgente = menor proporción stock / mínimo; a igualdad, el que más se consume (mínimo más alto).
+    const urgent = [...low].sort((a, b) => a.stock / a.min - b.stock / b.min || b.min - a.min || a.name.localeCompare(b.name));
+    const empty = low.filter((i) => i.stock <= 0).length;
+    const shown = urgent.slice(0, LOW_STOCK_SHOWN).map((i) => i.name);
+    const rest = low.length - shown.length;
     out.push({
       id: 'low_stock',
       kind: 'low_stock',
       severity: 'info',
-      title: `${snapshot.inventory.low_stock.length} insumo(s) en o bajo el mínimo`,
-      detail: snapshot.inventory.low_stock.map((i) => i.name).join(', '),
-      value: snapshot.inventory.low_stock.length,
+      title: `${low.length} insumo(s) en o bajo el mínimo${empty ? ` · ${empty} en cero` : ''}`,
+      detail: `Más urgentes: ${shown.join(', ')}${rest > 0 ? ` y ${rest} más` : ''}.`,
+      value: low.length,
     });
   }
 

@@ -64,7 +64,7 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
         }))}
         metrics={metrics}
         lowStock={inventory.ingredients
-          .filter((i) => i.stock_quantity <= i.min_stock)
+          .filter((i) => i.min_stock > 0 && i.stock_quantity <= i.min_stock)
           .map((i) => ({
             id: i.id,
             name: i.name,

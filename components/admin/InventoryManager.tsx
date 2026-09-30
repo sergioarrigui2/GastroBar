@@ -24,18 +24,21 @@ const MOVEMENT_LABELS: Record<MovementType, { label: string; className: string }
 
 export function InventoryManager({
   tenantId,
+  initialFilter = 'all',
   overview,
   currency,
   locale,
 }: {
   tenantId: string;
+  /** Filtro con el que abre la lista (p. ej. desde el aviso de stock bajo). */
+  initialFilter?: Filter;
   overview: InventoryOverview;
   currency: string;
   locale: string;
 }) {
   const router = useRouter();
   const money = (n: number) => formatCurrency(n, currency, locale);
-  const [filter, setFilter] = useState<Filter>('all');
+  const [filter, setFilter] = useState<Filter>(initialFilter);
   const [search, setSearch] = useState('');
   const [state, action, pending] = useActionState<FormState, FormData>(recordInventoryMovementAction, null);
   const [type, setType] = useState<'waste' | 'purchase' | 'adjustment'>('waste');
@@ -52,7 +55,7 @@ export function InventoryManager({
     const term = search.trim().toLowerCase();
     return overview.ingredients.filter(
       (i) =>
-        (filter === 'all' || (filter === 'liquor' ? i.is_liquor : i.stock_quantity <= i.min_stock)) &&
+        (filter === 'all' || (filter === 'liquor' ? i.is_liquor : i.min_stock > 0 && i.stock_quantity <= i.min_stock)) &&
         (!term || i.name.toLowerCase().includes(term)),
     );
   }, [overview.ingredients, filter, search]);
@@ -139,7 +142,7 @@ export function InventoryManager({
               </thead>
               <tbody className="tabular divide-y divide-zinc-100 dark:divide-zinc-800">
                 {rows.map((i) => {
-                  const low = i.stock_quantity <= i.min_stock;
+                  const low = i.min_stock > 0 && i.stock_quantity <= i.min_stock;
                   const pct = i.min_stock > 0 ? Math.min(100, (i.stock_quantity / (i.min_stock * 3)) * 100) : 100;
                   return (
                     <tr key={i.id} className={cn(low && 'bg-red-50/60 dark:bg-red-500/5')}>

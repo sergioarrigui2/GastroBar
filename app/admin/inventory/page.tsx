@@ -7,9 +7,9 @@ import { requirePageRole } from '@/lib/tenant-context';
 
 export const metadata = { title: 'Inventario' };
 
-export default async function InventoryPage() {
+export default async function InventoryPage({ searchParams }: { searchParams: Promise<{ filtro?: string }> }) {
   const ctx = await requirePageRole(['admin']);
-  const [overview, notices] = await Promise.all([getInventoryOverview(ctx), getInventoryNotices(ctx)]);
+  const [overview, notices, { filtro }] = await Promise.all([getInventoryOverview(ctx), getInventoryNotices(ctx), searchParams]);
   return (
     <>
       <AgentNotice
@@ -23,7 +23,7 @@ export default async function InventoryPage() {
         }
       />
       <AgentNotice agent="vigia" headline="esto no cuadra en tu inventario (30 días)" items={notices.vigia} />
-      <InventoryManager tenantId={ctx.tenant.id} overview={overview} currency={ctx.tenant.currency} locale={ctx.tenant.locale} />
+      <InventoryManager tenantId={ctx.tenant.id} initialFilter={filtro === 'bajo' ? 'low' : filtro === 'licores' ? 'liquor' : 'all'} overview={overview} currency={ctx.tenant.currency} locale={ctx.tenant.locale} />
     </>
   );
 }

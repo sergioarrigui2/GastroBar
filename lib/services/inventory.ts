@@ -56,7 +56,7 @@ export async function getInventoryOverview(ctx: TenantContext): Promise<Inventor
     movements: movementsRes.data.map((m) => ({ ...m, ingredient_name: names.get(m.ingredient_id) ?? '—' })),
     waste: { last7DaysCost: byIngredient.reduce((s, w) => s + w.cost, 0), byIngredient },
     stockValue: ingredientsRes.data.reduce((s, i) => s + Math.max(0, i.stock_quantity) * i.cost_per_unit, 0),
-    lowStockCount: ingredientsRes.data.filter((i) => i.stock_quantity <= i.min_stock).length,
+    lowStockCount: ingredientsRes.data.filter((i) => i.min_stock > 0 && i.stock_quantity <= i.min_stock).length,
   };
 }
 

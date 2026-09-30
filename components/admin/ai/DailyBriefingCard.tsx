@@ -29,7 +29,7 @@ export function DailyBriefingCard({ briefing, name }: { briefing: DailyBriefing;
           Tus agentes no ven nada fuera de lo normal en los últimos 7 días. Siguen vigilando caja, inventario, costos y equipo.
         </p>
       ) : (
-        <ol className="grid gap-3 md:grid-cols-3">
+        <ol className={cn('grid gap-3', briefing.items.length === 2 && 'md:grid-cols-2', briefing.items.length >= 3 && 'md:grid-cols-3')}>
           {briefing.items.map((item, i) => {
             const meta = ICON[item.severity];
             const Icon = meta.icon;
@@ -38,7 +38,12 @@ export function DailyBriefingCard({ briefing, name }: { briefing: DailyBriefing;
                 <Icon className={cn('mt-0.5 size-5 shrink-0', meta.className)} aria-hidden />
                 <div className="min-w-0 space-y-1">
                   <p className="text-sm font-semibold">{item.title}</p>
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">{item.action}</p>
+                  <p className="line-clamp-4 max-w-prose text-sm text-zinc-600 dark:text-zinc-400">{item.action}</p>
+                  {item.link && (
+                    <Link href={item.link.href} className="inline-block text-sm font-semibold text-brand-600 hover:underline">
+                      {item.link.label} →
+                    </Link>
+                  )}
                   <p className="flex items-center gap-1 text-xs text-zinc-500">
                     {item.source === 'comprador' ? (
                       <Link href="/admin/purchasing" className="flex items-center gap-1 font-semibold text-brand-600 hover:underline">
