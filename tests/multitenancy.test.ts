@@ -112,6 +112,8 @@ async function seedTenant(n: number, slug: string): Promise<Tenant> {
   await rows(A, `insert into ai_reports (period_from, period_to, model, facts_hash, facts, content) values (now() - interval '7 days', now(), 'm', 'h', '[]', '{}')`);
   await rows(A, `insert into ai_usage (feature, model, cost_usd) values ('analyst_report', 'm', 0.02)`);
   await superuser(`insert into public.tenant_ai_plans (tenant_id, plan) values ($1, 'pro')`, [id]);
+  await rows(A, `insert into terminal_devices (name, token_hash) values ('Tablet salón', 'th_${slug}')`);
+  await superuser(`insert into public.staff_pins (profile_id, tenant_id, pin_hash) values ($1, $2, 'scrypt$1$x$y')`, [users.waiter, id]);
   await superuser(`insert into public.tenant_agents (tenant_id, agent, enabled) values ($1, 'vigia', true), ($1, 'comprador', true)`, [id]);
 
   return {
@@ -307,5 +309,38 @@ describe('gastrobar suspendido', () => {
     }
     const [back] = await rows<{ c: string }>(A.users.admin, `select count(*) as c from public.products`);
     assert.equal(Number(back!.c), 1, 'al reactivar, A recupera todo');
+  });
+});
+
+describe('terminales compartidas y PIN del personal', () => {
+  test('nadie lee ni escribe los PIN con su sesión, ni siquiera el admin de su propio gastrobar', async () => {
+    for (const role of ROLES) {
+      await assert.rejects(rows(A.users[role], `select pin_hash from public.staff_pins`), `${role} leyó staff_pins`);
+      await assert.rejects(
+        rows(A.users[role], `insert into public.staff_pins (profile_id, tenant_id, pin_hash) values ($1, $2, 'x')`, [A.users.cashier, A.id]),
+        `${role} insertó en staff_pins`,
+      );
+      await assert.rejects(rows(A.users[role], `update public.staff_pins set failed_attempts = 0`), `${role} actualizó staff_pins`);
+    }
+    await assert.rejects(rows(null, `select pin_hash from public.staff_pins`));
+  });
+
+  test('sólo el admin ve y revoca las terminales, y sólo las de su gastrobar', async () => {
+    const [own] = await rows<{ c: string }>(A.users.admin, `select count(*) as c from public.terminal_devices`);
+    assert.equal(Number(own!.c), 1);
+    for (const role of ROLES.filter((r) => r !== 'admin')) {
+      const [r] = await rows<{ c: string }>(A.users[role], `select count(*) as c from public.terminal_devices`);
+      assert.equal(Number(r!.c), 0, `${role} ve las terminales`);
+      await assert.rejects(rows(A.users[role], `insert into public.terminal_devices (name, token_hash) values ('Pirata', 'th_pirata_${role}')`));
+    }
+    const revoked = await asUser(B.users.admin, `update public.terminal_devices set revoked_at = now() where tenant_id = $1`, [A.id]);
+    assert.equal(revoked.affectedRows ?? 0, 0, 'B revocó una terminal de A');
+    // El trigger fija el tenant del admin aunque intente declarar otro.
+    const [row] = await rows<{ tenant_id: string }>(
+      B.users.admin,
+      `insert into public.terminal_devices (tenant_id, name, token_hash) values ($1, 'Intrusa', 'th_intrusa') returning tenant_id`,
+      [A.id],
+    ).catch(() => [{ tenant_id: B.id }]);
+    assert.equal(row!.tenant_id, B.id);
   });
 });

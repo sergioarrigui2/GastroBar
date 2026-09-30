@@ -1,7 +1,9 @@
 import { AgentNotice } from '@/components/admin/ai/AgentAvatar';
 import { CashRegister } from '@/components/cash/CashRegister';
+import { TerminalIdleLock } from '@/components/terminal/TerminalIdleLock';
 import { getCashNotices } from '@/lib/services/agent-notices';
 import { getCashSession, listCashSessions, profileNames } from '@/lib/services/cash';
+import { hasTerminalCookie } from '@/lib/staff/terminal';
 import { requirePageRole } from '@/lib/tenant-context';
 
 export const metadata = { title: 'Caja' };
@@ -9,11 +11,12 @@ export const dynamic = 'force-dynamic';
 
 export default async function CashPage() {
   const ctx = await requirePageRole(['admin', 'cashier']);
-  const [session, history, names, notices] = await Promise.all([
+  const [session, history, names, notices, terminal] = await Promise.all([
     getCashSession(ctx),
     listCashSessions(ctx),
     profileNames(ctx),
     getCashNotices(ctx),
+    hasTerminalCookie(),
   ]);
 
   const paidOrders = session
@@ -37,6 +40,7 @@ export default async function CashPage() {
 
   return (
     <>
+      {terminal && <TerminalIdleLock showButton />}
       {notices.length > 0 && (
         <div className="mx-auto max-w-5xl px-4 pt-5">
           <AgentNotice agent="vigia" headline="revisé tus cierres de caja" items={notices} />

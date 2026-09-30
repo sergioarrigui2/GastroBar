@@ -300,8 +300,14 @@ export default async function HelpPage() {
 
         <Step n={5} title="Personal" href="/admin/staff" cta="Ir a Personal" done={s('staff')}>
           <p>
-            Cada persona entra con su correo y ve solo su pantalla. Las cuentas que creas aquí quedan activas de inmediato con la
-            contraseña que les asignes; si la olvidan, usan <b>¿Olvidaste tu contraseña?</b> en el ingreso.
+            Cada persona tiene su propio usuario y ve solo su pantalla. Hay dos formas de entrar: <b>con correo</b> (desde cualquier
+            equipo) o <b>sólo con PIN</b>, para meseros, caja, cocina y barra que no tienen o no usan correo.
+          </p>
+          <p>
+            Con rotación de personal, lo más práctico es una <b>terminal compartida</b>: entra con tu correo en la tablet del negocio y
+            autorízala en <b>Personal → Terminales compartidas</b>. Desde ahí cada empleado toca su nombre y marca su PIN; la tablet se
+            bloquea sola tras 3 minutos sin uso y cada venta queda a nombre de quien la hizo. Cuando alguien se va, usa{' '}
+            <b>Dar de baja</b>: pierde el acceso al instante y su historial de ventas se conserva. Si vuelve, <b>Reactivar</b>.
           </p>
           <Table
             head={['Rol', 'Entra a', 'Puede']}
@@ -359,7 +365,8 @@ export default async function HelpPage() {
             ['No se descuenta inventario', 'Completa la ficha técnica (receta) del producto.'],
             ['Un producto sale agotado', 'Algún insumo de su receta está en 0: registra una compra en Inventario.'],
             ['El menú QR dice que no existe', 'Activa el menú público en Ajustes.'],
-            ['Un empleado no puede entrar', 'Revisa que esté activo en Personal; si olvidó la contraseña, que use "¿Olvidaste tu contraseña?".'],
+            ['Un empleado no puede entrar', 'Revisa que esté activo en Personal. Si olvidó el PIN o quedó bloqueado, asígnale uno nuevo con "Cambiar PIN"; si usa correo, que use "¿Olvidaste tu contraseña?".'],
+            ['Un empleado no aparece en la tablet', 'Necesita un PIN asignado y estar activo. El PIN sólo funciona en tablets autorizadas en Personal.'],
             ['El recibo no trae número de factura', 'La facturación está apagada o el documento sigue en proceso; revisa Facturación.'],
           ]}
         />

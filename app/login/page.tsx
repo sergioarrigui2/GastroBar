@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { hasTerminalCookie } from '@/lib/staff/terminal';
 import { LoginForm } from './LoginForm';
 import { RecoveryRedirect } from './RecoveryRedirect';
 
@@ -10,6 +11,7 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string; error?: string }>;
 }) {
   const { next, error } = await searchParams;
+  const terminal = await hasTerminalCookie();
 
   return (
     <main className="grid min-h-dvh place-items-center px-4 py-10">
@@ -40,6 +42,14 @@ export default async function LoginPage({
           <p className="mb-4 rounded-xl bg-amber-100 p-3 text-sm text-amber-900 dark:bg-amber-500/15 dark:text-amber-200">
             Los usuarios <b>ai_agent</b> sólo acceden por API (/api/v1/mcp o /api/v1/ai-tools).
           </p>
+        )}
+        {terminal && (
+          <Link
+            href="/terminal"
+            className="mb-6 flex h-14 items-center justify-center rounded-2xl bg-brand-500 text-lg font-bold text-zinc-950 hover:bg-brand-400"
+          >
+            Ingresar con PIN
+          </Link>
         )}
         <RecoveryRedirect />
         <LoginForm next={next ?? '/'} />

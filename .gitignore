@@ -9,3 +9,6 @@ next-env.d.ts
 .claude/
 .DS_Store
 *.log
+
+# Importaciones de datos de clientes (nunca al repositorio)
+tmp-import/

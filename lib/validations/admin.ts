@@ -19,12 +19,23 @@ export const inventoryMovementSchema = z
 
 export const staffRoleSchema = z.enum(['admin', 'cashier', 'waiter', 'kitchen', 'bar', 'ai_agent']);
 
-export const createStaffSchema = z.object({
-  email: z.email().trim().toLowerCase(),
-  password: z.string().min(10, 'Mínimo 10 caracteres').max(72),
-  full_name: z.string().trim().min(2).max(120),
-  role: staffRoleSchema,
-});
+/** Con correo y contraseña (cualquier rol) o sólo PIN, para personal operativo sin correo propio. */
+export const createStaffSchema = z.discriminatedUnion('access', [
+  z.object({
+    access: z.literal('password'),
+    email: z.email('Correo inválido').trim().toLowerCase(),
+    password: z.string().min(10, 'La contraseña debe tener mínimo 10 caracteres').max(72),
+    full_name: z.string().trim().min(2).max(120),
+    role: staffRoleSchema,
+    pin: z.string().optional(),
+  }),
+  z.object({
+    access: z.literal('pin'),
+    full_name: z.string().trim().min(2).max(120),
+    role: z.enum(['cashier', 'waiter', 'kitchen', 'bar'], 'Sin correo sólo aplica a meseros, caja, cocina y barra'),
+    pin: z.string({ error: 'Asigna un PIN' }),
+  }),
+]);
 
 export const onboardingSchema = z.object({
   full_name: z.string().trim().min(2).max(120),

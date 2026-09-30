@@ -3,6 +3,7 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
+import { hasTerminalCookie } from '@/lib/staff/terminal';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { loginSchema, signUpSchema } from '@/lib/validations/admin';
 
@@ -60,8 +61,10 @@ export async function updatePasswordAction(_prev: AuthFormState, formData: FormD
   redirect('/');
 }
 
+/** En una terminal compartida, salir sólo cierra esta sesión y vuelve a la pantalla de PIN. */
 export async function signOutAction(): Promise<void> {
   const supabase = await createSupabaseServerClient();
-  await supabase.auth.signOut();
-  redirect('/login');
+  const terminal = await hasTerminalCookie();
+  await supabase.auth.signOut(terminal ? { scope: 'local' } : undefined);
+  redirect(terminal ? '/terminal' : '/login');
 }

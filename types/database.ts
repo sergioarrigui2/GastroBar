@@ -59,6 +59,8 @@ type ProfileRow = {
   role: AppRole;
   full_name: string;
   is_active: boolean;
+  /** Empleado sin correo propio: entra sólo con PIN en una terminal autorizada. */
+  pin_only: boolean;
   created_at: string;
 };
 
@@ -246,6 +248,27 @@ type InventoryMovementRow = {
   reason: string | null;
   created_by: string | null;
   created_at: string;
+};
+
+type TerminalDeviceRow = {
+  id: string;
+  tenant_id: string;
+  name: string;
+  token_hash: string;
+  created_by: string | null;
+  created_at: string;
+  last_seen_at: string | null;
+  revoked_at: string | null;
+};
+
+/** Sólo accesible con service role (RLS sin políticas). */
+type StaffPinRow = {
+  profile_id: string;
+  tenant_id: string;
+  pin_hash: string;
+  failed_attempts: number;
+  locked_until: string | null;
+  updated_at: string;
 };
 
 type ApiKeyRow = {
@@ -501,6 +524,8 @@ export type Database = {
       payment_allocations: Table<PaymentAllocationRow, 'payment_id' | 'order_item_id' | 'amount'>;
       inventory_movements: Table<InventoryMovementRow, 'ingredient_id' | 'movement_type' | 'quantity'>;
       api_keys: Table<ApiKeyRow, 'profile_id' | 'name' | 'key_prefix' | 'key_hash'>;
+      terminal_devices: Table<TerminalDeviceRow, 'name' | 'token_hash'>;
+      staff_pins: Table<StaffPinRow, 'profile_id' | 'tenant_id' | 'pin_hash'>;
       cash_sessions: Table<CashSessionRow, never>;
       cash_movements: Table<CashMovementRow, 'session_id' | 'movement_type' | 'amount' | 'reason'>;
       einvoice_credentials: Table<EInvoiceCredentialsRow, 'tenant_id' | 'provider' | 'encrypted_config'>;

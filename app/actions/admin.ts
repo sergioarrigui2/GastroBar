@@ -1,8 +1,11 @@
 'use server';
 
+import { randomBytes } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { toUserMessage } from '@/lib/errors';
 import { recordInventoryMovement } from '@/lib/services/inventory';
+import { hashPin, isPinRole, pinProblem } from '@/lib/staff/pin';
+import { syntheticStaffEmail } from '@/lib/staff/terminal';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { assertRole, getTenantContext } from '@/lib/tenant-context';
 import { createStaffSchema, inventoryMovementSchema } from '@/lib/validations/admin';
@@ -36,40 +39,59 @@ export async function recordInventoryMovementAction(_prev: FormState, formData: 
 /**
  * Alta de personal (incluye usuarios ai_agent). Requiere service role para crear
  * el usuario en Auth; el tenant se toma SIEMPRE de la sesión del admin.
+ * Con acceso "pin" el empleado no necesita correo: se le crea un correo interno
+ * en un dominio reservado y una contraseña aleatoria que nadie conoce; entra sólo
+ * con su PIN desde una terminal autorizada.
  */
 export async function createStaffAction(_prev: FormState, formData: FormData): Promise<FormState> {
   try {
     const ctx = await getTenantContext();
     assertRole(ctx, ['admin']);
     const input = createStaffSchema.parse({
+      access: field(formData, 'access') ?? 'password',
       email: field(formData, 'email'),
       password: field(formData, 'password'),
       full_name: field(formData, 'full_name'),
       role: field(formData, 'role'),
+      pin: field(formData, 'pin'),
     });
+    if (input.pin) {
+      if (!isPinRole(input.role)) throw new Error('Sólo meseros, caja, cocina y barra usan PIN');
+      const problem = pinProblem(input.pin);
+      if (problem) throw new Error(problem);
+    }
 
+    const pinOnly = input.access === 'pin';
     const admin = createSupabaseAdminClient();
     const { data: created, error: authError } = await admin.auth.admin.createUser({
-      email: input.email,
-      password: input.password,
+      email: pinOnly ? syntheticStaffEmail() : input.email,
+      password: pinOnly ? randomBytes(32).toString('base64url') : input.password,
       email_confirm: true,
       user_metadata: { full_name: input.full_name },
     });
     if (authError || !created.user) throw authError ?? new Error('No se pudo crear el usuario');
 
+    const rollback = async (error: unknown) => {
+      await admin.auth.admin.deleteUser(created.user.id);
+      throw error;
+    };
     const { error: profileError } = await admin.from('profiles').insert({
       id: created.user.id,
       tenant_id: ctx.tenant.id,
       role: input.role,
       full_name: input.full_name,
+      pin_only: pinOnly,
     });
-    if (profileError) {
-      await admin.auth.admin.deleteUser(created.user.id);
-      throw profileError;
+    if (profileError) await rollback(profileError);
+    if (input.pin) {
+      const { error: pinError } = await admin
+        .from('staff_pins')
+        .insert({ profile_id: created.user.id, tenant_id: ctx.tenant.id, pin_hash: hashPin(input.pin) });
+      if (pinError) await rollback(pinError);
     }
 
     revalidatePath('/admin/staff');
-    return { ok: true, message: `${input.full_name} agregado como ${input.role}` };
+    return { ok: true, message: `${input.full_name} agregado${input.pin ? ' con PIN' : ''}` };
   } catch (error) {
     return { ok: false, message: toUserMessage(error) };
   }

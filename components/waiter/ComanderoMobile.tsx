@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   Clock,
   Gift,
+  Lock,
   LogOut,
   Percent,
   Printer,
@@ -84,11 +85,14 @@ export function ComanderoMobile({
   user,
   snapshot,
   menu,
+  terminal = false,
 }: {
   tenant: { id: string; name: string; currency: string; locale: string; taxName: string; einvoiceEnabled: boolean };
   user: { name: string; role: AppRole };
   snapshot: TableStatusSnapshot;
   menu: MenuSnapshot;
+  /** Tablet compartida: salir vuelve a la pantalla de PIN. */
+  terminal?: boolean;
 }) {
   const router = useRouter();
   const money = useCallback((n: number) => formatCurrency(n, tenant.currency, tenant.locale), [tenant.currency, tenant.locale]);
@@ -361,8 +365,13 @@ export function ComanderoMobile({
               )}
               <ThemeToggle />
               <form action={signOutAction}>
-                <button type="submit" aria-label="Cerrar sesión" className="grid size-10 place-items-center rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800">
-                  <LogOut className="size-5" />
+                <button
+                  type="submit"
+                  aria-label={terminal ? 'Cambiar usuario' : 'Cerrar sesión'}
+                  title={terminal ? 'Cambiar usuario' : 'Cerrar sesión'}
+                  className="grid size-10 place-items-center rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                >
+                  {terminal ? <Lock className="size-5" /> : <LogOut className="size-5" />}
                 </button>
               </form>
             </div>
