@@ -20,6 +20,9 @@ function localMidnight(day: string, timeZone: string): Date {
   return new Date(guess.getTime() - (asLocal - guess.getTime()));
 }
 
+/** Tramo máximo por consulta al resumen del negocio (la función rechaza más de 366 días). */
+const CHUNK_DAYS = 360;
+
 const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
 async function historyDays(ctx: TenantContext, sinceDay: string) {
@@ -51,15 +54,26 @@ export async function getSalesDays(ctx: TenantContext, months = 25) {
   const historySource = history.at(-1)?.source ?? null;
 
   const liveFromDay = historyUntil ? addDays(historyUntil, 1) : since;
-  let live: DaySales[] = [];
-  if (liveFromDay <= today) {
-    const { data, error } = await ctx.supabase.rpc('get_business_snapshot', {
-      p_from: localMidnight(liveFromDay, tz).toISOString(),
-      p_to: new Date().toISOString(),
-    });
-    if (error) throw error;
-    live = (data as unknown as RawBusinessSnapshot).daily.map((d) => ({ day: String(d.date).slice(0, 10), orders: Number(d.orders), revenue: Number(d.revenue) }));
+  // get_business_snapshot admite como máximo 366 días por consulta: se pide por tramos.
+  const liveRows = new Map<string, DaySales>();
+  const calls: Array<PromiseLike<void>> = [];
+  for (let start = liveFromDay; start <= today; start = addDays(start, CHUNK_DAYS)) {
+    const end = addDays(start, CHUNK_DAYS);
+    const to = end > today ? new Date() : localMidnight(end, tz);
+    calls.push(
+      ctx.supabase
+        .rpc('get_business_snapshot', { p_from: localMidnight(start, tz).toISOString(), p_to: to.toISOString() })
+        .then(({ data, error }) => {
+          if (error) throw error;
+          for (const d of (data as unknown as RawBusinessSnapshot).daily) {
+            const row = { day: String(d.date).slice(0, 10), orders: Number(d.orders), revenue: Number(d.revenue) };
+            if (row.orders > 0 || row.revenue > 0) liveRows.set(row.day, row);
+          }
+        }),
+    );
   }
+  await Promise.all(calls);
+  const live = [...liveRows.values()];
   const days = mergeDays(
     history.map((d) => ({ day: d.day, orders: Number(d.orders), revenue: Number(d.revenue) })),
     live,

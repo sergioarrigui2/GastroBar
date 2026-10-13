@@ -24,7 +24,11 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     getLatestReport(ctx, range),
     getAiQuota(ctx),
     getAgentAccess(ctx),
-    getMonthlySales(ctx),
+    // El historial es un complemento: si falla, el resto del análisis se sigue viendo.
+    getMonthlySales(ctx).catch((error: unknown) => {
+      console.error('sales-history', error);
+      return null;
+    }),
   ]);
 
   return (
@@ -57,15 +61,17 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
           )
         }
       />
-      <SalesHistoryCard
-        months={sales.months}
-        historyUntil={sales.historyUntil}
-        historySource={sales.historySource}
-        rangeLabel={ANALYSIS_RANGES[range].label}
-        rangeCompare={lastDaysVsLastYear(sales.days, sales.today, ANALYSIS_RANGES[range].days)}
-        currency={ctx.tenant.currency}
-        locale={ctx.tenant.locale}
-      />
+      {sales && (
+        <SalesHistoryCard
+          months={sales.months}
+          historyUntil={sales.historyUntil}
+          historySource={sales.historySource}
+          rangeLabel={ANALYSIS_RANGES[range].label}
+          rangeCompare={lastDaysVsLastYear(sales.days, sales.today, ANALYSIS_RANGES[range].days)}
+          currency={ctx.tenant.currency}
+          locale={ctx.tenant.locale}
+        />
+      )}
     </div>
   );
 }
