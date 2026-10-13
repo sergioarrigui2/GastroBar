@@ -124,6 +124,8 @@ async function seedTenant(n: number, slug: string): Promise<Tenant> {
   await superuser(`insert into public.ai_connection_calls (tenant_id, connection_id, tool, ok) values ($1, $2, 'get_table_status', true)`, [id, conn]);
   await superuser(`insert into public.staff_pins (profile_id, tenant_id, pin_hash) values ($1, $2, 'scrypt$1$x$y')`, [users.waiter, id]);
   await superuser(`insert into public.tenant_agents (tenant_id, agent, enabled) values ($1, 'vigia', true), ($1, 'comprador', true)`, [id]);
+  await superuser(`insert into public.sales_history_days (tenant_id, day, orders, revenue) values ($1, '2025-10-01', 50, 1500000)`, [id]);
+  await superuser(`insert into public.sales_history_products (tenant_id, month, product_id, product_name, quantity, revenue) values ($1, '2025-10-01', $2, 'Mojito', 20, 440000)`, [id, product]);
 
   return {
     id, slug, users, zone, table, category, product, ingredient, subRecipe, modifier,

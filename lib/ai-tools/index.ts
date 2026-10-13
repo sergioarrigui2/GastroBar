@@ -11,6 +11,7 @@ import { getBusinessAnalysisTool } from './tools/get-business-analysis';
 import { getMenuAvailabilityTool } from './tools/get-menu-availability';
 import { getInventoryStatusTool } from './tools/get-inventory-status';
 import { getMenuCostsTool } from './tools/get-menu-costs';
+import { getSalesHistoryTool } from './tools/get-sales-history';
 import { getTableStatusTool } from './tools/get-table-status';
 import { processSplitPaymentTool } from './tools/process-split-payment';
 import { fetchTool, searchTool } from './tools/search-fetch';
@@ -34,6 +35,7 @@ export const aiTools = {
   get_business_analysis_tool: getBusinessAnalysisTool,
   get_menu_costs: getMenuCostsTool,
   get_inventory_status: getInventoryStatusTool,
+  get_sales_history: getSalesHistoryTool,
   search: searchTool,
   fetch: fetchTool,
 } as const;

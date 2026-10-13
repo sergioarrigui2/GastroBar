@@ -359,6 +359,9 @@ type AiConnectionRow = {
 };
 type AiConnectionTokenRow = { token_hash: string; connection_id: string; kind: 'access' | 'refresh'; expires_at: string; revoked_at: string | null; created_at: string };
 type AiConnectionCallRow = { id: string; tenant_id: string; connection_id: string; tool: string; ok: boolean; created_at: string };
+/** Historial de ventas importado (023): resumen, no cuentas. */
+type SalesHistoryDayRow = { tenant_id: string; day: string; orders: number; revenue: number; tips: number; discounts: number; payments: Json; source: string };
+type SalesHistoryProductRow = { id: string; tenant_id: string; month: string; product_id: string | null; product_name: string; category: string | null; quantity: number; revenue: number; source: string };
 
 type ApiKeyRow = {
   id: string;
@@ -623,6 +626,8 @@ export type Database = {
       ai_connections: Table<AiConnectionRow, 'tenant_id' | 'client_name' | 'agent_profile_id' | 'scopes'>;
       ai_connection_tokens: Table<AiConnectionTokenRow, 'token_hash' | 'connection_id' | 'kind' | 'expires_at'>;
       ai_connection_calls: Table<AiConnectionCallRow, 'tenant_id' | 'connection_id' | 'tool' | 'ok'>;
+      sales_history_days: Table<SalesHistoryDayRow, 'tenant_id' | 'day'>;
+      sales_history_products: Table<SalesHistoryProductRow, 'tenant_id' | 'month' | 'product_name'>;
       order_submissions: Table<{ client_id: string; tenant_id: string; result: Json; created_by: string | null; created_at: string }, 'client_id' | 'result'>;
       staff_pins: Table<StaffPinRow, 'profile_id' | 'tenant_id' | 'pin_hash'>;
       cash_sessions: Table<CashSessionRow, never>;

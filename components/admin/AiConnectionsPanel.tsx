@@ -14,6 +14,7 @@ const TOOL_LABEL: Record<string, string> = {
   get_bar_metrics_tool: 'Métricas del turno',
   get_menu_costs: 'Carta con costos',
   get_inventory_status: 'Inventario',
+  get_sales_history: 'Historial de ventas',
   get_table_status: 'Estado de mesas',
   get_menu_availability: 'Menú disponible',
   search: 'Búsqueda',
