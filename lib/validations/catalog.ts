@@ -4,7 +4,8 @@ import { stationSchema } from './order';
 
 const id = z.uuid();
 const optionalId = z.uuid().nullable().optional();
-const name = z.string().trim().min(1, 'Nombre requerido').max(120);
+// Espacios repetidos se reducen a uno: «Café  especial» y «Café especial» son el mismo nombre.
+const name = z.string().trim().min(1, 'Nombre requerido').max(120).transform((s) => s.replace(/\s+/g, ' '));
 const sortOrder = z.int().min(0).max(9999).default(0);
 const money = z.number().finite().min(0).max(100_000_000);
 const quantity = z.number().finite().positive('La cantidad debe ser mayor a 0').max(1_000_000);

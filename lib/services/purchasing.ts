@@ -89,7 +89,7 @@ export async function getPurchasingOverview(ctx: TenantContext) {
 
 export const supplierSchema = z.object({
   id: z.uuid().optional(),
-  name: z.string().trim().min(1, 'Escribe el nombre').max(120),
+  name: z.string().trim().min(1, 'Escribe el nombre').max(120).transform((s) => s.replace(/\s+/g, ' ')),
   contact_name: z.string().trim().max(120).nullish(),
   phone: z.string().trim().max(30).nullish(),
   email: z.union([z.email(), z.literal('')]).nullish(),

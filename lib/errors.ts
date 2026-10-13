@@ -64,6 +64,9 @@ export function toUserMessage(error: unknown): string {
     if (error.code === '23505' && error.message?.includes('orders_one_open_per_table')) {
       return 'La mesa ya tiene otra cuenta abierta; ciérrala antes de reabrir esta';
     }
+    if (error.code === '23505' && error.message?.includes('_name_key_uidx')) {
+      return 'Ya existe uno con ese nombre (sin contar tildes, mayúsculas ni espacios). Usa el que ya está o cámbiale el nombre.';
+    }
     if (error.code === '23505') return 'Ya existe un registro con ese nombre';
     if (error.code === '23503') {
       return 'No se puede eliminar porque está en uso (ventas, recetas o productos asociados). Desactívalo en su lugar.';

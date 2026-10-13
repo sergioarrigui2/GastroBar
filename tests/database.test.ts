@@ -139,6 +139,19 @@ describe('schema', () => {
     await assert.rejects(as(WAITER_A, `select private.apply_recipe_stock($1, null, $2, 1, 1)`, [ids.tenantA, ids.mojito]), /permission denied/);
   });
 
+  test('no deja nombres repetidos por tildes, mayúsculas o espacios, pero sí en otro gastrobar', async () => {
+    // Ya existe «Azúcar» en el bar A.
+    for (const dup of ['AZUCAR', 'azúcar', ' Azu car ']) {
+      await assert.rejects(as(ADMIN_A, `insert into ingredients (name, unit) values ($1, 'g')`, [dup]), /ingredients_name_key_uidx/);
+    }
+    await assert.rejects(as(ADMIN_A, `insert into categories (name, station) values ('COCTELES', 'bar')`), /categories_name_key_uidx/);
+    // «1/2» no es «12».
+    await as(ADMIN_A, `insert into ingredients (name, unit) values ('Ron 1/2', 'unit'), ('Ron 12', 'unit')`);
+    await as(ADMIN_B, `insert into ingredients (name, unit) values ('azucar', 'g')`);
+    await as(ADMIN_A, `delete from ingredients where name in ('Ron 1/2', 'Ron 12')`);
+    await as(ADMIN_B, `delete from ingredients where name = 'azucar'`);
+  });
+
   test('quitar un ítem enviado: sólo admin, con motivo; devuelve el stock y queda quién y por qué', async () => {
     const [burger] = await as<{ id: string }>(ADMIN_A, `select id from order_items where product_id = $1`, [ids.burger]);
     await assert.rejects(as(WAITER_A, `update order_items set status = 'cancelled' where product_id = $1`, [ids.burger]), /forbidden/);
