@@ -15,3 +15,6 @@ tmp-import/
 
 # Vinculación local de GastroBar Print (contiene su token)
 gastrobar-print.json
+
+# Copias de seguridad manuales (datos reales del negocio)
+backups/
