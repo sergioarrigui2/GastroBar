@@ -15,7 +15,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
 
   return (
     <div className="min-h-dvh md:grid md:grid-cols-[15rem_1fr]">
-      <aside className="print:hidden sticky top-0 z-20 border-b border-zinc-200 bg-white/95 backdrop-blur md:h-dvh md:border-b-0 md:border-r dark:border-zinc-800 dark:bg-zinc-950/95">
+      <aside className="print:hidden sticky top-0 z-20 border-b border-zinc-200 bg-white/95 backdrop-blur md:h-dvh md:overflow-y-auto md:border-b-0 md:border-r dark:border-zinc-800 dark:bg-zinc-950/95">
         <div className="flex items-center gap-2 px-4 py-3 md:py-5">
           <TenantLogo url={ctx.tenant.logo_url} name={ctx.tenant.name} className="size-10" />
           <div className="min-w-0 flex-1">
