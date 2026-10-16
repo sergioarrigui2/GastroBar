@@ -27,3 +27,12 @@ export async function readBrand(): Promise<Brand | null> {
     return null;
   }
 }
+
+/** Marca pública de un negocio por su identificador (enlace de ingreso propio: /login?negocio=el-punto). Sólo negocios activos. */
+export async function brandBySlug(slug: string | undefined): Promise<Brand | null> {
+  if (!slug || !/^[a-z0-9][a-z0-9-]{1,60}$/.test(slug)) return null;
+  const { createSupabaseAdminClient } = await import('@/lib/supabase/admin');
+  const { data } = await createSupabaseAdminClient().from('tenants').select('name, logo_url, status').eq('slug', slug).maybeSingle();
+  if (!data || data.status !== 'active') return null;
+  return { name: data.name, logo: validLogo(data.logo_url) ? data.logo_url : null };
+}

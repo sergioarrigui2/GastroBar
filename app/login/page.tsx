@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { readBrand } from '@/lib/branding';
+import { brandBySlug, readBrand } from '@/lib/branding';
 import { getTerminal, hasTerminalCookie } from '@/lib/staff/terminal';
 import { LoginForm } from './LoginForm';
 import { RecoveryRedirect } from './RecoveryRedirect';
@@ -9,13 +9,13 @@ export const metadata = { title: 'Ingresar' };
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; error?: string }>;
+  searchParams: Promise<{ next?: string; error?: string; negocio?: string }>;
 }) {
-  const { next, error } = await searchParams;
+  const { next, error, negocio } = await searchParams;
   const terminal = await hasTerminalCookie();
-  // Una tablet autorizada sabe de qué negocio es; en los demás casos, el navegador recuerda el último que ingresó.
+  // Orden: el enlace propio del negocio (?negocio=…), la tablet autorizada y, por último, el negocio que ingresó antes en este navegador.
   const t = terminal ? await getTerminal().catch(() => null) : null;
-  const brand = t ? { name: t.tenantName, logo: t.tenantLogo } : await readBrand();
+  const brand = (await brandBySlug(negocio).catch(() => null)) ?? (t ? { name: t.tenantName, logo: t.tenantLogo } : await readBrand());
 
   return (
     <main className="grid min-h-dvh place-items-center px-4 py-10">

@@ -110,6 +110,9 @@ export function SettingsForm({ tenant }: { tenant: Tenant }) {
           <Label htmlFor="s-name">Nombre</Label>
           <Input id="s-name" value={name} onChange={(e) => setName(e.target.value)} />
           <p className="mt-1 text-xs text-zinc-500">Identificador: {tenant.slug}</p>
+          <p className="mt-1 text-xs text-zinc-500">
+            Enlace de ingreso del equipo (con el logo del negocio): <code className="select-all rounded bg-zinc-100 px-1.5 py-0.5 dark:bg-zinc-800">/login?negocio={tenant.slug}</code>
+          </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
           <div>
