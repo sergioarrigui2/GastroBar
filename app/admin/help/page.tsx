@@ -156,7 +156,7 @@ export default async function HelpPage() {
         { id: 'split', label: <>Toca cobrar y elige <b>Iguales</b> entre 2: una parte con tarjeta y otra en efectivo con propina.</> },
         { id: 'paid', label: <>La orden queda <b>pagada</b>, la mesa se libera y puedes imprimir el <b>recibo</b>.</> },
         { id: 'modes', label: <>En otra mesa prueba <b>Completa</b>, <b>Por ítem</b> y <b>Montos</b>.</> },
-        { id: 'void', label: <>Anula un pago (en <b>Caja</b> o en la cuenta) con un motivo: la orden se reabre con saldo pendiente. Cóbrala de nuevo.</> },
+        { id: 'void', label: <>Como administrador, anula un pago (en la cuenta de la mesa) con un motivo: la orden se reabre con saldo pendiente. Cóbrala de nuevo.</> },
       ],
     },
     {
@@ -312,9 +312,10 @@ export default async function HelpPage() {
           <Table
             head={['Rol', 'Entra a', 'Puede']}
             rows={[
-              [<b key="a">Administrador</b>, 'Métricas', 'Todo: configuración, reportes, caja y anulaciones'],
-              [<b key="c">Caja</b>, 'Comandero', 'Tomar pedidos, cobrar, abrir y cerrar caja, anular pagos'],
-              [<b key="w">Mesero</b>, 'Comandero', 'Tomar pedidos, cortesías, descuentos y cobrar'],
+              [<b key="a">Administrador</b>, 'Métricas', 'Todo: configuración, reportes, caja, auditoría y anulaciones (pedidos, productos enviados y pagos)'],
+              [<b key="s">Supervisor</b>, 'Lo primero que tenga permitido', 'Sólo lo que el administrador le habilite: inventario, compras, proveedores o tomar pedidos. Nunca cobra ni ve ventas, caja ni recetas'],
+              [<b key="c">Caja</b>, 'Comandero', 'Tomar pedidos, cobrar, descuentos, cortesías, abrir y cerrar caja. No anula pagos ni pedidos'],
+              [<b key="w">Mesero</b>, 'Comandero', 'Tomar pedidos, entregar, trasladar mesas, imprimir la precuenta y cobrar. No hace descuentos, cortesías ni anulaciones'],
               [<b key="k">Cocina</b>, 'KDS Cocina', 'Ver y avanzar solo lo de cocina'],
               [<b key="b">Barra</b>, 'KDS Barra', 'Ver y avanzar solo lo de barra'],
             ]}
