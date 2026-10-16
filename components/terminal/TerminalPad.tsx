@@ -1,5 +1,6 @@
 'use client';
 
+import { Avatar } from '@/components/ui/Avatar';
 import { ArrowLeft, Delete } from 'lucide-react';
 import { useActionState, useEffect, useRef, useState } from 'react';
 import { type PinState, signInWithPinAction } from '@/app/actions/terminal';
@@ -9,7 +10,7 @@ import type { AppRole } from '@/types/domain';
 const ROLE_LABELS: Partial<Record<AppRole, string>> = { waiter: 'Mesero', cashier: 'Caja', kitchen: 'Cocina', bar: 'Barra' };
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
-type Staff = { id: string; name: string; role: AppRole };
+type Staff = { id: string; name: string; role: AppRole; avatar?: string | null };
 
 /** Pantalla de la tablet compartida: cada empleado toca su nombre y marca su PIN. */
 export function TerminalPad({ staff }: { staff: Staff[] }) {
@@ -57,9 +58,7 @@ export function TerminalPad({ staff }: { staff: Staff[] }) {
               }}
               className="flex w-full flex-col items-center gap-2 rounded-2xl border border-zinc-200 bg-white p-4 text-center transition hover:border-brand-500 active:scale-[.98] dark:border-zinc-800 dark:bg-zinc-900"
             >
-              <span className="grid size-14 place-items-center rounded-full bg-zinc-100 text-2xl font-bold dark:bg-zinc-800">
-                {s.name.slice(0, 1).toUpperCase()}
-              </span>
+              <Avatar name={s.name} url={s.avatar} size="lg" />
               <span className="line-clamp-2 font-semibold leading-tight">{s.name}</span>
               <span className="text-xs text-zinc-500">{ROLE_LABELS[s.role] ?? s.role}</span>
             </button>

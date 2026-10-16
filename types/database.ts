@@ -41,6 +41,8 @@ type TenantRow = {
   phone: string | null;
   receipt_footer: string | null;
   public_menu_enabled: boolean;
+  /** Logo del negocio (028). */
+  logo_url: string | null;
   /** Modo de operación (024): false = los platos de esa estación nacen entregados, sin pantalla. */
   uses_kitchen_screen: boolean;
   uses_bar_screen: boolean;
@@ -66,6 +68,9 @@ type ProfileRow = {
   pin_only: boolean;
   /** Permisos del supervisor (026). Sin efecto en otros roles; el administrador lo tiene todo. */
   permissions: string[];
+  /** Teléfono y foto (028). */
+  phone: string | null;
+  avatar_url: string | null;
   created_at: string;
 };
 
@@ -748,6 +753,10 @@ export type Database = {
       get_purchase_inputs: {
         Args: { p_tenant: string; p_days?: number };
         Returns: Json;
+      };
+      update_my_profile: {
+        Args: { p_full_name?: string | null; p_phone?: string | null; p_avatar_url?: string | null; p_clear_phone?: boolean; p_clear_avatar?: boolean };
+        Returns: ProfileRow;
       };
       get_audit_summary: {
         Args: { p_from: string; p_to: string };

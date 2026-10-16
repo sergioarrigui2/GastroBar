@@ -3,6 +3,7 @@
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
+import { rememberBrand } from '@/lib/branding';
 import { hasTerminalCookie, isPinSession, PIN_SESSION_COOKIE } from '@/lib/staff/terminal';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { loginSchema, signUpSchema } from '@/lib/validations/admin';
@@ -24,8 +25,19 @@ export async function signInAction(_prev: AuthFormState, formData: FormData): Pr
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
   if (error) return { error: 'Credenciales incorrectas' };
   (await cookies()).delete(PIN_SESSION_COOKIE); // sesión con correo: sin bloqueo ni pantalla de PIN
+  await rememberLoginBrand(supabase);
 
   redirect(safeNext(str(formData, 'next')));
+}
+
+/** Guarda en este navegador el nombre y logo del negocio, para mostrarlos en el login la próxima vez. */
+async function rememberLoginBrand(supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>) {
+  try {
+    const { data: tenant } = await supabase.from('tenants').select('name, logo_url').limit(1).maybeSingle();
+    if (tenant) await rememberBrand({ name: tenant.name, logo: tenant.logo_url });
+  } catch {
+    // La marca es un adorno: nunca debe impedir el ingreso.
+  }
 }
 
 /** Envía el correo de recuperación. Responde igual exista o no la cuenta (no filtra correos). */

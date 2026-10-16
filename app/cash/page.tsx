@@ -50,6 +50,7 @@ export default async function CashPage() {
         tenant={{
           id: ctx.tenant.id,
           name: ctx.tenant.name,
+          logo: ctx.tenant.logo_url,
           currency: ctx.tenant.currency,
           locale: ctx.tenant.locale,
           timezone: ctx.tenant.timezone,

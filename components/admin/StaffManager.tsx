@@ -1,10 +1,14 @@
 'use client';
 
-import { Bot, KeyRound, ShieldCheck } from 'lucide-react';
+import { KeyRound, Pencil, ShieldCheck } from 'lucide-react';
 import { useActionState, useState, useTransition } from 'react';
 import { createStaffAction, setStaffActiveAction, updateStaffPermissionsAction, type FormState } from '@/app/actions/admin';
+import { updateStaffProfileAction } from '@/app/actions/profile';
 import { setStaffPinAction, type TerminalFormState } from '@/app/actions/terminal';
+import { Avatar } from '@/components/ui/Avatar';
+import { PhotoUploader } from '@/components/ui/PhotoUploader';
 import { Badge, Button, Card, Input, Label, Select } from '@/components/ui/primitives';
+import { AVATAR_BUCKET, avatarPhoto } from '@/lib/images/process';
 import { PERMISSION_INFO, PERMISSIONS, SUPERVISOR_PRESET } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 import type { AppRole, Profile } from '@/types/domain';
@@ -22,7 +26,7 @@ const PIN_ROLES: AppRole[] = ['waiter', 'cashier', 'kitchen', 'bar'];
 
 type PinInfo = Record<string, { locked: boolean }>;
 
-export function StaffManager({ staff, currentUserId, pins }: { staff: Profile[]; currentUserId: string; pins: PinInfo }) {
+export function StaffManager({ staff, tenantId, currentUserId, pins }: { staff: Profile[]; tenantId: string; currentUserId: string; pins: PinInfo }) {
   const [state, action, pending] = useActionState<FormState, FormData>(createStaffAction, null);
   const [access, setAccess] = useState<'password' | 'pin'>('pin');
   const [role, setRole] = useState<AppRole>('waiter');
@@ -38,7 +42,7 @@ export function StaffManager({ staff, currentUserId, pins }: { staff: Profile[];
           <h2 className="mb-1 font-semibold">Activos ({active.length})</h2>
           <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {active.map((p) => (
-              <StaffRow key={p.id} p={p} self={p.id === currentUserId} pin={pins[p.id]} />
+              <StaffRow key={p.id} tenantId={tenantId} p={p} self={p.id === currentUserId} pin={pins[p.id]} />
             ))}
           </ul>
           {inactive.length > 0 && (
@@ -48,7 +52,7 @@ export function StaffManager({ staff, currentUserId, pins }: { staff: Profile[];
               </summary>
               <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
                 {inactive.map((p) => (
-                  <StaffRow key={p.id} p={p} self={false} pin={pins[p.id]} />
+                  <StaffRow key={p.id} tenantId={tenantId} p={p} self={false} pin={pins[p.id]} />
                 ))}
               </ul>
             </details>
@@ -173,7 +177,7 @@ export function StaffManager({ staff, currentUserId, pins }: { staff: Profile[];
   );
 }
 
-function StaffRow({ p, self, pin }: { p: Profile; self: boolean; pin?: { locked: boolean } }) {
+function StaffRow({ p, tenantId, self, pin }: { p: Profile; tenantId: string; self: boolean; pin?: { locked: boolean } }) {
   const [toggling, startToggle] = useTransition();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState('');
@@ -184,15 +188,19 @@ function StaffRow({ p, self, pin }: { p: Profile; self: boolean; pin?: { locked:
   const [permsOpen, setPermsOpen] = useState(false);
   const [perms, setPerms] = useState<string[]>(p.permissions ?? []);
   const [savingPerms, startSavePerms] = useTransition();
+  const [dataOpen, setDataOpen] = useState(false);
+  const [fullName, setFullName] = useState(p.full_name);
+  const [phone, setPhone] = useState(p.phone ?? '');
+  const [avatar, setAvatar] = useState<string | null>(p.avatar_url);
+  const [savingData, startSaveData] = useTransition();
 
   return (
     <li className={cn('py-3', !p.is_active && 'opacity-60')}>
       <div className="flex flex-wrap items-center gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-zinc-100 font-bold dark:bg-zinc-800">
-          {p.role === 'ai_agent' ? <Bot className="size-5" /> : p.full_name.slice(0, 1).toUpperCase()}
-        </span>
+        <Avatar name={p.full_name} url={p.avatar_url} agent={p.role === 'ai_agent'} />
         <span className="min-w-0 flex-1">
           <span className="block truncate font-medium">{p.full_name}</span>
+          {p.phone && <span className="block truncate text-xs text-zinc-500">{p.phone}</span>}
           <span className="flex flex-wrap gap-1.5">
             <Badge className="bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">{ROLE_LABELS[p.role]}</Badge>
             {p.pin_only && <Badge className="bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-200">Sin correo</Badge>}
@@ -206,6 +214,11 @@ function StaffRow({ p, self, pin }: { p: Profile; self: boolean; pin?: { locked:
             )}
           </span>
         </span>
+        {p.role !== 'ai_agent' && (
+          <Button variant="ghost" size="sm" onClick={() => setDataOpen((v) => !v)} aria-expanded={dataOpen}>
+            <Pencil className="size-4" /> Datos
+          </Button>
+        )}
         {isSupervisor && p.is_active && (
           <Button variant="ghost" size="sm" onClick={() => setPermsOpen((v) => !v)} aria-expanded={permsOpen}>
             <ShieldCheck className="size-4" /> Permisos
@@ -227,6 +240,42 @@ function StaffRow({ p, self, pin }: { p: Profile; self: boolean; pin?: { locked:
           </Button>
         )}
       </div>
+      {dataOpen && (
+        <div className="mt-3 space-y-3 rounded-xl bg-zinc-50 p-3 dark:bg-zinc-900">
+          <PhotoUploader
+            bucket={AVATAR_BUCKET}
+            folder={`${tenantId}/${p.id}`}
+            value={avatar}
+            process={avatarPhoto}
+            round
+            hint="Foto de la persona (se recorta en cuadrado)."
+            onChange={setAvatar}
+          />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label htmlFor={`n-${p.id}`}>Nombre completo</Label>
+              <Input id={`n-${p.id}`} value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor={`t-${p.id}`}>Teléfono</Label>
+              <Input id={`t-${p.id}`} value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" />
+            </div>
+          </div>
+          <Button
+            size="sm"
+            disabled={savingData || fullName.trim().length < 2}
+            onClick={() =>
+              startSaveData(async () => {
+                const r = await updateStaffProfileAction(p.id, { full_name: fullName, phone: phone.trim() || null, avatar_url: avatar });
+                setResult(r.ok ? { ok: true, message: 'Datos guardados' } : { ok: false, message: r.error });
+                if (r.ok) setDataOpen(false);
+              })
+            }
+          >
+            Guardar datos
+          </Button>
+        </div>
+      )}
       {permsOpen && (
         <div className="mt-3 space-y-2.5 rounded-xl bg-zinc-50 p-3 dark:bg-zinc-900">
           {PERMISSIONS.map((perm) => (

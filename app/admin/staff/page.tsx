@@ -71,7 +71,7 @@ export default async function StaffPage() {
   return (
     <div className="space-y-6">
       <AgentNotice agent="vigia" headline="lo que noté en el equipo (30 días)" items={notices} />
-      <StaffManager staff={staffRes.data} currentUserId={ctx.userId} pins={pins} />
+      <StaffManager staff={staffRes.data} tenantId={ctx.tenant.id} currentUserId={ctx.userId} pins={pins} />
       <TerminalsPanel
         devices={devicesRes.data}
         currentDeviceId={thisTerminal?.tenantId === ctx.tenant.id ? thisTerminal.id : null}

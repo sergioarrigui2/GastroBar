@@ -46,6 +46,7 @@ import { printBillAction } from '@/app/actions/printing';
 import { printOrFallback } from '@/components/print/printOrFallback';
 import { TransferSheet } from '@/components/waiter/TransferSheet';
 import { useOrderOutbox } from '@/components/waiter/useOrderOutbox';
+import { Avatar, TenantLogo } from '@/components/ui/Avatar';
 import { Badge, Button, Stepper } from '@/components/ui/primitives';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useRealtimeRefresh } from '@/components/ui/useRealtimeRefresh';
@@ -95,8 +96,8 @@ export function ComanderoMobile({
   menu,
   terminal = false,
 }: {
-  tenant: { id: string; name: string; currency: string; locale: string; taxName: string; einvoiceEnabled: boolean };
-  user: { name: string; role: AppRole };
+  tenant: { id: string; name: string; logo?: string | null; currency: string; locale: string; taxName: string; einvoiceEnabled: boolean };
+  user: { name: string; avatar?: string | null; role: AppRole };
   snapshot: TableStatusSnapshot;
   menu: MenuSnapshot;
   /** Tablet compartida: salir vuelve a la pantalla de PIN. */
@@ -429,10 +430,15 @@ export function ComanderoMobile({
         <>
           <header className="sticky top-0 z-20 border-b border-zinc-200 bg-zinc-50/90 px-4 pb-2 pt-3 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/90">
             <div className="flex items-center gap-2">
+              <TenantLogo url={tenant.logo} name={tenant.name} />
               <div className="min-w-0 flex-1">
                 <h1 className="truncate text-lg font-bold">{tenant.name}</h1>
                 <p className="flex items-center gap-1.5 text-xs text-zinc-500">
-                  {user.name} ·{' '}
+                  <Link href="/perfil" className="flex items-center gap-1.5 hover:underline" title="Mi perfil">
+                    <Avatar name={user.name} url={user.avatar} size="sm" className="size-5 text-[10px]" />
+                    {user.name}
+                  </Link>{' '}
+                  ·{' '}
                   {realtime === 'live' ? (
                     <span className="flex items-center gap-1 text-emerald-600">
                       <span className="size-2 rounded-full bg-emerald-500" /> En vivo

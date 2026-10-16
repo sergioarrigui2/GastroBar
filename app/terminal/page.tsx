@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { TenantLogo } from '@/components/ui/Avatar';
 import { ActivateTerminalForm } from '@/components/terminal/ActivateTerminalForm';
 import { TerminalPad } from '@/components/terminal/TerminalPad';
 import { getTerminal, listTerminalStaff } from '@/lib/staff/terminal';
@@ -45,10 +46,13 @@ export default async function TerminalPage() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-4xl flex-col gap-8 px-4 py-8">
       <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-3">
+          <TenantLogo url={terminal.tenantLogo} name={terminal.tenantName} className="size-16 rounded-2xl" />
+          <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{terminal.name}</p>
           <h1 className="text-2xl font-bold">{terminal.tenantName}</h1>
           <p className="text-sm text-zinc-500">Toca tu nombre para empezar tu turno</p>
+          </div>
         </div>
         {current && sameTenant && (
           <Link href={HOME_BY_ROLE[current.role]} className="rounded-xl bg-zinc-100 px-4 py-2 text-sm font-semibold dark:bg-zinc-800">

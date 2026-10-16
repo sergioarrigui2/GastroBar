@@ -10,6 +10,7 @@ import { PaymentsList } from '@/components/billing/PaymentsList';
 import { FlashMessage, toNumber, useAdminMutation } from '@/components/admin/useAdminMutation';
 import { printBillAction, printCashReportAction } from '@/app/actions/printing';
 import { printOrFallback } from '@/components/print/printOrFallback';
+import { TenantLogo } from '@/components/ui/Avatar';
 import { Button, Card, Input, Label } from '@/components/ui/primitives';
 import { Sheet } from '@/components/ui/Sheet';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
@@ -32,7 +33,7 @@ export function CashRegister({
   history,
   paidOrders,
 }: {
-  tenant: { id: string; name: string; currency: string; locale: string; timezone: string };
+  tenant: { id: string; name: string; logo?: string | null; currency: string; locale: string; timezone: string };
   role: AppRole;
   session: CashSession | null;
   openedByName: string | null;
@@ -87,6 +88,7 @@ export function CashRegister({
         >
           <ChevronLeft className="size-6" />
         </Link>
+        <TenantLogo url={tenant.logo} name={tenant.name} />
         <div className="mr-auto">
           <h1 className="text-2xl font-bold">Caja</h1>
           <p className="text-sm text-zinc-500">{tenant.name}</p>

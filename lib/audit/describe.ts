@@ -163,6 +163,8 @@ export function describeAudit(e: Pick<AuditEntry, 'action' | 'details'>, money: 
     case 'purchase.discarded':
       return `Descartó un pedido de compras (${str(d.lines)} insumos)`;
     // Personal
+    case 'staff.renamed':
+      return `Cambió el nombre de ${str(d.from)} a ${str(d.to)}`;
     case 'staff.created':
       return `Agregó a ${str(d.name)} como ${roleName(d.role)}`;
     case 'staff.role_changed':

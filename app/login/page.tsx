@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { hasTerminalCookie } from '@/lib/staff/terminal';
+import { readBrand } from '@/lib/branding';
+import { getTerminal, hasTerminalCookie } from '@/lib/staff/terminal';
 import { LoginForm } from './LoginForm';
 import { RecoveryRedirect } from './RecoveryRedirect';
 
@@ -12,15 +13,22 @@ export default async function LoginPage({
 }) {
   const { next, error } = await searchParams;
   const terminal = await hasTerminalCookie();
+  // Una tablet autorizada sabe de qué negocio es; en los demás casos, el navegador recuerda el último que ingresó.
+  const t = terminal ? await getTerminal().catch(() => null) : null;
+  const brand = t ? { name: t.tenantName, logo: t.tenantLogo } : await readBrand();
 
   return (
     <main className="grid min-h-dvh place-items-center px-4 py-10">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 grid size-14 place-items-center rounded-2xl bg-zinc-900 text-2xl dark:bg-zinc-800">
-            🍸
-          </div>
-          <h1 className="text-2xl font-bold">GastroBar POS</h1>
+          {brand?.logo ? (
+            <img src={brand.logo} alt={`Logo de ${brand.name}`} className="mx-auto mb-4 h-20 max-w-[12rem] rounded-2xl bg-white object-contain p-1" />
+          ) : (
+            <div className="mx-auto mb-4 grid size-14 place-items-center rounded-2xl bg-zinc-900 text-2xl dark:bg-zinc-800">
+              🍸
+            </div>
+          )}
+          <h1 className="text-2xl font-bold">{brand?.name ?? 'GastroBar POS'}</h1>
           <p className="mt-1 text-sm text-zinc-500">Ingresa con tu usuario del gastrobar</p>
         </div>
         {error === 'confirm' && (

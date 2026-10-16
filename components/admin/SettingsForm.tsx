@@ -2,7 +2,10 @@
 
 import { useState } from 'react';
 import { updateTenantSettingsAction } from '@/app/actions/catalog';
+import { setTenantLogoAction } from '@/app/actions/profile';
+import { PhotoUploader } from '@/components/ui/PhotoUploader';
 import { Button, Card, Input, Label, Select } from '@/components/ui/primitives';
+import { IMAGE_BUCKET, logoImage } from '@/lib/images/process';
 import { CO_CITY_SUGGESTIONS, CO_DEPARTMENTS } from '@/lib/geo/colombia';
 import type { Tenant } from '@/types/domain';
 import { FlashMessage, toNumber, useAdminMutation } from './useAdminMutation';
@@ -92,6 +95,17 @@ export function SettingsForm({ tenant }: { tenant: Tenant }) {
 
       <Card className="space-y-4">
         <h2 className="font-semibold">General</h2>
+        <div>
+          <Label>Logo del negocio</Label>
+          <PhotoUploader
+            bucket={IMAGE_BUCKET}
+            folder={`${tenant.id}/branding`}
+            value={tenant.logo_url}
+            process={logoImage}
+            hint="Aparece junto al nombre del negocio, en el ingreso y en el menú público. Se guarda al elegirlo."
+            onChange={(url) => run(() => setTenantLogoAction(url), url ? 'Logo actualizado' : 'Logo quitado')}
+          />
+        </div>
         <div>
           <Label htmlFor="s-name">Nombre</Label>
           <Input id="s-name" value={name} onChange={(e) => setName(e.target.value)} />

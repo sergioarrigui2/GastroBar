@@ -3,11 +3,12 @@
 import { ChefHat, MapPin, Martini, Phone, Search } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useMemo, useState } from 'react';
+import { TenantLogo } from '@/components/ui/Avatar';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { cn, formatCurrency } from '@/lib/utils';
 
 export type PublicMenuData = {
-  tenant: { name: string; slug: string; currency: string; locale: string; address: string | null; phone: string | null };
+  tenant: { name: string; slug: string; currency: string; locale: string; address: string | null; phone: string | null; logo_url?: string | null };
   categories: Array<{ id: string; name: string; station: 'bar' | 'kitchen' }>;
   products: Array<{
     id: string;
@@ -56,6 +57,7 @@ export function PublicMenu({ menu }: { menu: PublicMenuData }) {
     <div className="mx-auto min-h-dvh max-w-2xl pb-16">
       <header className="px-4 pb-4 pt-6">
         <div className="flex items-start gap-3">
+          <TenantLogo url={tenant.logo_url} name={tenant.name} className="size-14 rounded-xl" />
           <div className="min-w-0 flex-1">
             <h1 className="text-3xl font-black tracking-tight">{tenant.name}</h1>
             <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-zinc-500">

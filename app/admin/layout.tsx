@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { signOutAction } from '@/app/actions/auth';
 import { AdminNav } from '@/components/admin/AdminNav';
+import { Avatar, TenantLogo } from '@/components/ui/Avatar';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { PERMISSIONS } from '@/lib/permissions';
 import { isPlatformAdmin } from '@/lib/platform/auth';
@@ -16,9 +17,13 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     <div className="min-h-dvh md:grid md:grid-cols-[15rem_1fr]">
       <aside className="print:hidden sticky top-0 z-20 border-b border-zinc-200 bg-white/95 backdrop-blur md:h-dvh md:border-b-0 md:border-r dark:border-zinc-800 dark:bg-zinc-950/95">
         <div className="flex items-center gap-2 px-4 py-3 md:py-5">
+          <TenantLogo url={ctx.tenant.logo_url} name={ctx.tenant.name} className="size-10" />
           <div className="min-w-0 flex-1">
             <p className="truncate font-bold">{ctx.tenant.name}</p>
-            <p className="truncate text-xs text-zinc-500">{ctx.profile.full_name} · {ctx.role === 'supervisor' ? 'supervisor' : 'admin'}</p>
+            <Link href="/perfil" className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100" title="Mi perfil">
+              <Avatar name={ctx.profile.full_name} url={ctx.profile.avatar_url} size="sm" className="size-5 text-[10px]" />
+              <span className="truncate">{ctx.profile.full_name} · {ctx.role === 'supervisor' ? 'supervisor' : 'admin'}</span>
+            </Link>
           </div>
           <ThemeToggle />
         </div>

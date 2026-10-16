@@ -19,13 +19,14 @@ export default async function WaiterPage() {
       tenant={{
         id: ctx.tenant.id,
         name: ctx.tenant.name,
+        logo: ctx.tenant.logo_url,
         currency: ctx.tenant.currency,
         locale: ctx.tenant.locale,
         taxName: ctx.tenant.tax_name,
         einvoiceEnabled: ctx.tenant.einvoice_enabled,
       }}
       // Un supervisor con «tomar pedidos» ve el comandero de un mesero (sin cobros ni anulaciones).
-      user={{ name: ctx.profile.full_name, role: ctx.role === 'supervisor' ? 'waiter' : ctx.role }}
+      user={{ name: ctx.profile.full_name, avatar: ctx.profile.avatar_url, role: ctx.role === 'supervisor' ? 'waiter' : ctx.role }}
       snapshot={snapshot}
       menu={menu}
       terminal={terminal}

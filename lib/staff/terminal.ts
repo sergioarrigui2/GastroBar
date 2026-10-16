@@ -30,7 +30,7 @@ export function syntheticStaffEmail(): string {
   return `pin-${randomBytes(9).toString('hex')}@${STAFF_EMAIL_DOMAIN}`;
 }
 
-export type Terminal = { id: string; name: string; tenantId: string; tenantName: string };
+export type Terminal = { id: string; name: string; tenantId: string; tenantName: string; tenantLogo: string | null };
 
 const SEEN_THROTTLE_MS = 10 * 60_000;
 
@@ -50,7 +50,7 @@ export async function getTerminal(): Promise<Terminal | null> {
 
   const { data: tenant, error: tenantError } = await admin
     .from('tenants')
-    .select('name, status')
+    .select('name, status, logo_url')
     .eq('id', device.tenant_id)
     .maybeSingle();
   if (tenantError) throw tenantError;
@@ -59,7 +59,7 @@ export async function getTerminal(): Promise<Terminal | null> {
   if (!device.last_seen_at || Date.now() - new Date(device.last_seen_at).getTime() > SEEN_THROTTLE_MS) {
     void admin.from('terminal_devices').update({ last_seen_at: new Date().toISOString() }).eq('id', device.id);
   }
-  return { id: device.id, name: device.name, tenantId: device.tenant_id, tenantName: tenant.name };
+  return { id: device.id, name: device.name, tenantId: device.tenant_id, tenantName: tenant.name, tenantLogo: tenant.logo_url };
 }
 
 /** ¿Este dispositivo tiene cookie de terminal? (sin validar). */
@@ -80,7 +80,7 @@ export async function isPinSession(): Promise<boolean> {
   return jar.has(TERMINAL_COOKIE) && jar.get(PIN_SESSION_COOKIE)?.value === '1';
 }
 
-export type TerminalStaff = { id: string; name: string; role: AppRole };
+export type TerminalStaff = { id: string; name: string; role: AppRole; avatar: string | null };
 
 /** Personal activo del gastrobar de la terminal que tiene PIN asignado. */
 export async function listTerminalStaff(terminal: Terminal): Promise<TerminalStaff[]> {
@@ -92,12 +92,12 @@ export async function listTerminalStaff(terminal: Terminal): Promise<TerminalSta
 
   const { data, error } = await admin
     .from('profiles')
-    .select('id, full_name, role')
+    .select('id, full_name, role, avatar_url')
     .eq('tenant_id', terminal.tenantId)
     .eq('is_active', true)
     .in('role', [...PIN_ROLES])
     .in('id', ids)
     .order('full_name');
   if (error) throw error;
-  return (data ?? []).map((p) => ({ id: p.id, name: p.full_name, role: p.role }));
+  return (data ?? []).map((p) => ({ id: p.id, name: p.full_name, role: p.role, avatar: p.avatar_url }));
 }

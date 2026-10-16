@@ -20,6 +20,23 @@ async function drawSquare(file: Blob, side: number): Promise<HTMLCanvasElement> 
 const toBlob = (canvas: HTMLCanvasElement, type: string, quality: number) =>
   new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('No se pudo procesar la imagen'))), type, quality));
 
+/** Foto de una persona: cuadrada, 256 px, WebP (~15 KB). */
+export async function avatarPhoto(file: Blob): Promise<Blob> {
+  return toBlob(await drawSquare(file, 256), 'image/webp', 0.85);
+}
+
+/** Logo: conserva su proporción (no se recorta), máx. 512 px de lado largo, WebP con transparencia. */
+export async function logoImage(file: Blob): Promise<Blob> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return toBlob(canvas, 'image/webp', 0.92);
+}
+
 /** Foto para el menú: cuadrada, máx. 1024 px, WebP (~100 KB). */
 export async function menuPhoto(file: Blob): Promise<Blob> {
   return toBlob(await drawSquare(file, 1024), 'image/webp', 0.85);
@@ -37,4 +54,6 @@ export async function aiThumbnail(file: Blob): Promise<string> {
 }
 
 export const IMAGE_BUCKET = 'product-images';
+/** Fotos del equipo (028): carpeta del negocio / carpeta de la persona. */
+export const AVATAR_BUCKET = 'avatars';
 export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
