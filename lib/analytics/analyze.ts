@@ -289,6 +289,14 @@ export function detectAnomalies(
 }
 
 /** Enriquece el resumen SQL con variaciones, ingeniería de menú, horarios y anomalías. */
+/**
+ * Quita del resumen las estaciones sin pantalla: sus platos nacen entregados, así que sus
+ * tiempos de preparación no significan nada y no deben salir como «demoras» ni «rapidez».
+ */
+export function withActiveStations(raw: RawBusinessSnapshot, active: { kitchen?: boolean; bar?: boolean }): RawBusinessSnapshot {
+  return { ...raw, stations: raw.stations.filter((s) => active[s.station] !== false) };
+}
+
 export function analyzeSnapshot(raw: RawBusinessSnapshot, money: Money = defaultMoney): BusinessAnalysis {
   const snapshot: RawBusinessSnapshot = {
     ...raw,

@@ -21,7 +21,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
           </div>
           <ThemeToggle />
         </div>
-        <AdminNav />
+        <AdminNav kitchenScreen={ctx.tenant.uses_kitchen_screen} barScreen={ctx.tenant.uses_bar_screen} />
         {platform && (
           <Link href="/platform" className="mx-4 mt-4 hidden rounded-xl border border-dashed border-brand-400/60 px-3 py-2 text-sm font-semibold text-brand-600 md:block">
             Consola de plataforma →

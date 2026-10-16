@@ -104,6 +104,8 @@ export const tenantSettingsSchema = z
     kds_late_minutes: z.int().min(2).max(480),
     allow_negative_stock: z.boolean(),
     public_menu_enabled: z.boolean(),
+    uses_kitchen_screen: z.boolean().optional(),
+    uses_bar_screen: z.boolean().optional(),
     tax_name: z.string().trim().min(1).max(20),
     tax_rate: z.number().finite().min(0).max(100),
     prices_include_tax: z.boolean(),

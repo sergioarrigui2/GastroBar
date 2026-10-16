@@ -47,6 +47,8 @@ export function SettingsForm({ tenant }: { tenant: Tenant }) {
   const [late, setLate] = useState(String(tenant.kds_late_minutes));
   const [allowNegative, setAllowNegative] = useState(tenant.allow_negative_stock);
   const [publicMenu, setPublicMenu] = useState(tenant.public_menu_enabled);
+  const [kitchenScreen, setKitchenScreen] = useState(tenant.uses_kitchen_screen ?? true);
+  const [barScreen, setBarScreen] = useState(tenant.uses_bar_screen ?? true);
   const [taxId, setTaxId] = useState(tenant.tax_id ?? '');
   const [address, setAddress] = useState(tenant.address ?? '');
   const [city, setCity] = useState(tenant.city ?? '');
@@ -69,6 +71,8 @@ export function SettingsForm({ tenant }: { tenant: Tenant }) {
           kds_late_minutes: Math.trunc(toNumber(late)),
           allow_negative_stock: allowNegative,
           public_menu_enabled: publicMenu,
+          uses_kitchen_screen: kitchenScreen,
+          uses_bar_screen: barScreen,
           tax_id: taxId.trim() || null,
           address: address.trim() || null,
           city: city.trim() || null,
@@ -213,6 +217,36 @@ export function SettingsForm({ tenant }: { tenant: Tenant }) {
       </Card>
 
       <Card className="space-y-4">
+        <h2 className="font-semibold">Pantallas de cocina y barra</h2>
+        <p className="text-sm text-zinc-500">
+          Si en tu negocio la cocina o la barra no usan pantalla (cocinan con la comanda impresa o de palabra), apágala. Los
+          platos de esa estación quedan como entregados al enviar la comanda: el inventario se descuenta y se cobra igual, y
+          su pantalla desaparece del menú. Si las dejas encendidas, todo funciona como siempre.
+        </p>
+        <label className="flex items-start gap-3 text-sm">
+          <input type="checkbox" className="mt-0.5 size-5 accent-emerald-600" checked={kitchenScreen} onChange={(e) => setKitchenScreen(e.target.checked)} />
+          <span>
+            <b>La cocina usa la pantalla (KDS)</b>
+            <span className="block text-zinc-500">La cocina marca cada plato como «en preparación» y «listo».</span>
+          </span>
+        </label>
+        <label className="flex items-start gap-3 text-sm">
+          <input type="checkbox" className="mt-0.5 size-5 accent-emerald-600" checked={barScreen} onChange={(e) => setBarScreen(e.target.checked)} />
+          <span>
+            <b>La barra usa la pantalla (KDS)</b>
+            <span className="block text-zinc-500">Quien prepara las bebidas marca cada una como «lista».</span>
+          </span>
+        </label>
+        {(!kitchenScreen || !barScreen) && (
+          <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
+            Sin pantalla, la cocina se entera de las comandas por la impresión automática (configúrala en <b>Impresión</b>) o de
+            palabra. Los cambios aplican a las comandas nuevas.
+          </p>
+        )}
+      </Card>
+
+      {(kitchenScreen || barScreen) && (
+      <Card className="space-y-4">
         <h2 className="font-semibold">Tiempos del KDS</h2>
         <p className="text-sm text-zinc-500">
           Las comandas se ven en verde hasta el primer límite, en amarillo hasta el segundo y en rojo después.
@@ -228,6 +262,7 @@ export function SettingsForm({ tenant }: { tenant: Tenant }) {
           </div>
         </div>
       </Card>
+      )}
 
       <Card className="space-y-2">
         <h2 className="font-semibold">Inventario</h2>

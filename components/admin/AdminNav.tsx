@@ -25,11 +25,13 @@ const LINKS = [
   { href: '/kds/bar', label: 'KDS Barra', icon: Martini },
 ];
 
-export function AdminNav() {
+export function AdminNav({ kitchenScreen = true, barScreen = true }: { kitchenScreen?: boolean; barScreen?: boolean }) {
   const pathname = usePathname();
+  // Un negocio sin pantalla de cocina o de barra no ve esos accesos.
+  const links = LINKS.filter((l) => (l.href !== '/kds/kitchen' || kitchenScreen) && (l.href !== '/kds/bar' || barScreen));
   return (
     <nav aria-label="Administración" className="scrollbar-none flex gap-1 overflow-x-auto px-3 pb-2 md:flex-col md:overflow-visible md:pb-0">
-      {LINKS.map(({ href, label, icon: Icon }) => {
+      {links.map(({ href, label, icon: Icon }) => {
         const active = href === '/admin' ? pathname === href : pathname.startsWith(href);
         return (
           <Link

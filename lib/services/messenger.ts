@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { analyzeSnapshot } from '@/lib/analytics/analyze';
+import { analyzeSnapshot, withActiveStations } from '@/lib/analytics/analyze';
 import { buildBriefing } from '@/lib/analytics/briefing';
 import type { RawBusinessSnapshot } from '@/lib/analytics/types';
 import { detectedValue } from '@/lib/analytics/value';
@@ -14,7 +14,7 @@ import { formatCurrency } from '@/lib/utils';
 import type { Database } from '@/types/database';
 
 type Client = SupabaseClient<Database>;
-type TenantInfo = { id: string; name: string; currency: string; locale: string; timezone: string };
+type TenantInfo = { id: string; name: string; currency: string; locale: string; timezone: string; uses_kitchen_screen?: boolean; uses_bar_screen?: boolean };
 
 /** Envíos manuales permitidos por día (el programado no cuenta). */
 export const MANUAL_SENDS_PER_DAY = 5;
@@ -52,7 +52,10 @@ export async function buildTenantDigest(supabase: Client, tenant: TenantInfo, as
   ]);
   if (snap.error) throw snap.error;
 
-  const analysis = analyzeSnapshot(snap.data as unknown as RawBusinessSnapshot, money);
+  const analysis = analyzeSnapshot(
+    withActiveStations(snap.data as unknown as RawBusinessSnapshot, { kitchen: tenant.uses_kitchen_screen, bar: tenant.uses_bar_screen }),
+    money,
+  );
   const latestReport = report.data ? { content: report.data.content as unknown as AnalystReport, created_at: report.data.created_at } : null;
   const draft = purchase.data?.status === 'draft' ? purchase.data : null;
   const draftLines = (draft?.lines as Array<{ urgent?: boolean }> | undefined) ?? [];

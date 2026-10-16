@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { analyzeSnapshot } from '../lib/analytics/analyze.ts';
+import { analyzeSnapshot, withActiveStations } from '../lib/analytics/analyze.ts';
 import type { RawBusinessSnapshot, SnapshotKpis, SnapshotProduct } from '../lib/analytics/types.ts';
 
 const kpis = (over: Partial<SnapshotKpis> = {}): SnapshotKpis => ({
@@ -99,4 +99,19 @@ test('sin ventas no hay divisiones por cero ni anomalías falsas', () => {
   assert.equal(a.changes.revenue.change_pct, null);
   assert.deepEqual(a.anomalies, []);
   assert.deepEqual(a.menu.products, []);
+});
+
+test('una estación sin pantalla no cuenta en demoras ni en tiempos; las demás se conservan', () => {
+  const raw = snapshot({
+    stations: [
+      { station: 'kitchen', items: 50, avg_minutes: 0, p90_minutes: 0, pct_warning: 0, pct_late: 0 },
+      { station: 'bar', items: 30, avg_minutes: 16, p90_minutes: 31, pct_warning: 60, pct_late: 34 },
+    ],
+  });
+  assert.equal(withActiveStations(raw, {}).stations.length, 2); // sin datos del modo = todo activo
+  assert.equal(withActiveStations(raw, { kitchen: true, bar: true }).stations.length, 2);
+  assert.deepEqual(withActiveStations(raw, { kitchen: false }).stations.map((x) => x.station), ['bar']);
+  assert.equal(withActiveStations(raw, { kitchen: false, bar: false }).stations.length, 0);
+  const kinds = analyzeSnapshot(withActiveStations(raw, { bar: false })).anomalies.map((x) => x.id);
+  assert.ok(!kinds.includes('station_delays:bar'));
 });

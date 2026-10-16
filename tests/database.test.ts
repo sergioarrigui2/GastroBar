@@ -921,3 +921,57 @@ describe('fotos del menú con IA', () => {
     await assert.rejects(as(ADMIN_A, `insert into ai_usage (feature, model) values ('otra_cosa', 'x')`), /ai_usage_feature_check/);
   });
 });
+
+describe('modo de operación: negocios sin pantalla de cocina o de barra', () => {
+  const items = (table: string) =>
+    as<{ station: string; status: string }>(
+      ADMIN_A,
+      `select i.station, i.status from order_items i join orders o on o.id = i.order_id where o.table_id = $1 order by i.round, i.station`,
+      [table],
+    );
+
+  test('por defecto todo sigue igual; con la cocina apagada sus platos nacen entregados y se cobra normal', async () => {
+    const t = (await one<{ id: string }>(ADMIN_A, `insert into tables (zone_id, label) values ($1, 'Mesa sin pantallas') returning id`, [ids.zone])).id;
+    try {
+      // Por defecto (pantallas encendidas): todo queda pendiente, como siempre.
+      const before = await one<{ k: boolean; b: boolean }>(ADMIN_A, `select uses_kitchen_screen as k, uses_bar_screen as b from tenants`);
+      assert.deepEqual(before, { k: true, b: true });
+      const base = await stock('Carne');
+      await submit(WAITER_A, [{ product_id: ids.burger }, { product_id: ids.mojito }], t);
+      assert.deepEqual((await items(t)).map((i) => i.status), ['pending', 'pending']);
+      assert.equal(await stock('Carne'), base - 200);
+
+      // Cocina sin pantalla: la hamburguesa nace entregada; el mojito (barra) sigue el flujo normal.
+      await as(ADMIN_A, `update tenants set uses_kitchen_screen = false`);
+      await submit(WAITER_A, [{ product_id: ids.burger }, { product_id: ids.mojito }], t);
+      assert.deepEqual(
+        (await items(t)).slice(2).map((i) => [i.station, i.status]),
+        [['kitchen', 'delivered'], ['bar', 'pending']],
+      );
+      assert.equal(await stock('Carne'), base - 400); // el inventario se descuenta igual
+
+      // Barra también sin pantalla: la ronda completa queda entregada.
+      await as(ADMIN_A, `update tenants set uses_bar_screen = false`);
+      const r3 = await submit(WAITER_A, [{ product_id: ids.burger }, { product_id: ids.mojito }], t);
+      assert.equal(r3.round, 3);
+      assert.deepEqual((await items(t)).slice(4).map((i) => i.status), ['delivered', 'delivered']);
+
+      // Cobrar no depende de la pantalla: se paga la cuenta y la mesa se libera.
+      const order = await one<{ id: string; total: string }>(ADMIN_A, `select id, total from orders where table_id = $1`, [t]);
+      await as(WAITER_A, `select public.register_payments($1, 'custom', $2::jsonb)`, [order.id, JSON.stringify([{ amount: Number(order.total), method: 'cash' }])]);
+      assert.equal((await one<{ status: string }>(ADMIN_A, `select status from orders where id = $1`, [order.id])).status, 'paid');
+      assert.equal((await one<{ status: string }>(ADMIN_A, `select status from tables where id = $1`, [t])).status, 'free');
+    } finally {
+      // Se restablece el modo normal aunque la prueba falle.
+      await as(ADMIN_A, `update tenants set uses_kitchen_screen = true, uses_bar_screen = true`);
+    }
+  });
+
+  test('sólo el administrador cambia el modo, y sólo el de su gastrobar', async () => {
+    await as(WAITER_A, `update tenants set uses_kitchen_screen = false`);
+    assert.equal((await one<{ k: boolean }>(ADMIN_A, `select uses_kitchen_screen as k from tenants`)).k, true);
+    await as(ADMIN_B, `update tenants set uses_kitchen_screen = false`); // sólo toca su propia fila
+    assert.equal((await one<{ k: boolean }>(ADMIN_A, `select uses_kitchen_screen as k from tenants`)).k, true);
+    await as(ADMIN_B, `update tenants set uses_kitchen_screen = true`);
+  });
+});

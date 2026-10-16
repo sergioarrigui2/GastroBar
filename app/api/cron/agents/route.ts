@@ -34,7 +34,7 @@ export async function GET(request: Request) {
   const tenantIds = [...new Set((due ?? []).map((s) => s.tenant_id))];
   const [{ data: tenants }, { data: settings }] = tenantIds.length
     ? await Promise.all([
-        admin.from('tenants').select('id, name, currency, locale, timezone, status').in('id', tenantIds),
+        admin.from('tenants').select('id, name, currency, locale, timezone, status, uses_kitchen_screen, uses_bar_screen').in('id', tenantIds),
         admin.from('messenger_settings').select('tenant_id, emails').in('tenant_id', tenantIds),
       ])
     : [{ data: [] }, { data: [] }];

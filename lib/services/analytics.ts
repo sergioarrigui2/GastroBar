@@ -1,5 +1,5 @@
 import 'server-only';
-import { analyzeSnapshot } from '@/lib/analytics/analyze';
+import { analyzeSnapshot, withActiveStations } from '@/lib/analytics/analyze';
 import type { BusinessAnalysis, RawBusinessSnapshot } from '@/lib/analytics/types';
 import type { TenantContext } from '@/lib/tenant-context';
 import { formatCurrency } from '@/lib/utils';
@@ -20,5 +20,6 @@ export function rangeFromDays(days: number, now = new Date()): { from: string; t
 export async function getBusinessAnalysis(ctx: TenantContext, range: { from: string; to: string }): Promise<BusinessAnalysis> {
   const { data, error } = await ctx.supabase.rpc('get_business_snapshot', { p_from: range.from, p_to: range.to });
   if (error) throw error;
-  return analyzeSnapshot(data as unknown as RawBusinessSnapshot, (n) => formatCurrency(n, ctx.tenant.currency, ctx.tenant.locale));
+  const snapshot = withActiveStations(data as unknown as RawBusinessSnapshot, { kitchen: ctx.tenant.uses_kitchen_screen, bar: ctx.tenant.uses_bar_screen });
+  return analyzeSnapshot(snapshot, (n) => formatCurrency(n, ctx.tenant.currency, ctx.tenant.locale));
 }

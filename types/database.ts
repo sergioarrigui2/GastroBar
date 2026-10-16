@@ -41,6 +41,9 @@ type TenantRow = {
   phone: string | null;
   receipt_footer: string | null;
   public_menu_enabled: boolean;
+  /** Modo de operación (024): false = los platos de esa estación nacen entregados, sin pantalla. */
+  uses_kitchen_screen: boolean;
+  uses_bar_screen: boolean;
   tax_name: string;
   tax_rate: number;
   prices_include_tax: boolean;
