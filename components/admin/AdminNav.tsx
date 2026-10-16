@@ -1,7 +1,8 @@
 'use client';
 
-import { BarChart3, BookOpen, ChefHat, ClipboardCheck, FileCheck2, LayoutGrid, LifeBuoy, LineChart, Martini, Package, Printer, QrCode, Settings, ShoppingCart, Smartphone, Sparkles, Users, Wallet } from 'lucide-react';
+import { BarChart3, ChevronDown, BookOpen, ChefHat, ClipboardCheck, FileCheck2, LayoutGrid, LifeBuoy, LineChart, Martini, Package, Printer, QrCode, Settings, ShoppingCart, Smartphone, Sparkles, Users, Wallet } from 'lucide-react';
 import Link from 'next/link';
+import { useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { canAny, type Permission } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
@@ -77,30 +78,47 @@ export function AdminNav({
     // Un supervisor sólo ve lo que sus permisos habilitan; el administrador, todo.
     (access.role === 'admin' || Boolean(l.perms && canAny(access, ...l.perms)));
   const groups = GROUPS.map((g) => ({ ...g, links: g.links.filter(visible) })).filter((g) => g.links.length > 0);
+  const isActive = (href: string) => (href === '/admin' ? pathname === href : pathname.startsWith(href));
+  // Cada sección se abre y se cierra; arranca abierta la que contiene la página actual y la primera.
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const isOpen = (g: (typeof groups)[number], i: number) => open[g.title] ?? (i === 0 || g.links.some((l) => isActive(l.href)));
   return (
-    <nav aria-label="Administración" className="scrollbar-none flex gap-1 overflow-x-auto px-3 pb-2 md:flex-col md:gap-0 md:overflow-visible md:pb-0">
-      {groups.map((g) => (
-        <div key={g.title} className="flex shrink-0 gap-1 md:flex-col md:pb-3">
-          <p className="hidden px-3 pb-1 pt-1 text-[11px] font-bold uppercase tracking-wider text-zinc-400 md:block">{g.title}</p>
-          {g.links.map(({ href, label, icon: Icon }) => {
-            const active = href === '/admin' ? pathname === href : pathname.startsWith(href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                aria-current={active ? 'page' : undefined}
-                className={cn(
-                  'flex h-10 shrink-0 items-center gap-2 rounded-xl px-3 text-sm font-semibold',
-                  active ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800',
-                )}
-              >
-                <Icon className="size-4" />
-                {label}
-              </Link>
-            );
-          })}
-        </div>
-      ))}
+    <nav aria-label="Administración" className="scrollbar-none flex gap-1 overflow-x-auto px-3 pb-2 md:flex-col md:gap-0.5 md:overflow-visible md:pb-0">
+      {groups.map((g, i) => {
+        const expanded = isOpen(g, i);
+        return (
+          <div key={g.title} className="flex shrink-0 gap-1 md:flex-col md:gap-0">
+            <button
+              type="button"
+              onClick={() => setOpen((cur) => ({ ...cur, [g.title]: !expanded }))}
+              aria-expanded={expanded}
+              className="hidden items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-bold text-zinc-800 hover:bg-zinc-100 md:flex dark:text-zinc-100 dark:hover:bg-zinc-800"
+            >
+              {g.title}
+              <ChevronDown className={cn('size-4 text-zinc-400 transition-transform', !expanded && '-rotate-90')} />
+            </button>
+            <div className={cn('flex gap-1 md:flex-col md:gap-0 md:border-l md:border-zinc-200 md:ml-4 md:pl-1 dark:md:border-zinc-800', !expanded && 'md:hidden')}>
+              {g.links.map(({ href, label, icon: Icon }) => {
+                const active = isActive(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    aria-current={active ? 'page' : undefined}
+                    className={cn(
+                      'flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium',
+                      active ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800',
+                    )}
+                  >
+                    <Icon className="size-4" />
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
     </nav>
   );
 }

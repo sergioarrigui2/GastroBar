@@ -72,6 +72,7 @@ export function KDSDisplay({
   const [fresh, setFresh] = useState<Set<string>>(new Set());
   const [lastBumped, setLastBumped] = useState<{ key: string; itemIds: string[]; label: string } | null>(null);
   const [sound, setSound] = useState(true);
+  const soundKey = `gastrobar:kds-sound:${tenantId}:${station}`;
   const [fullscreen, setFullscreen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -80,6 +81,24 @@ export function KDSDisplay({
   useEffect(() => {
     soundRef.current = sound;
   }, [sound]);
+  // La preferencia se recuerda en esta pantalla (cada estación y negocio por separado).
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(soundKey) === 'off') setSound(false);
+    } catch {
+      // Sin almacenamiento: queda activado.
+    }
+  }, [soundKey]);
+  const toggleSound = () => {
+    const next = !sound;
+    setSound(next);
+    try {
+      localStorage.setItem(soundKey, next ? 'on' : 'off');
+    } catch {
+      // No se pudo recordar; el cambio sigue valiendo hasta recargar.
+    }
+    if (next) beep(); // Confirma que suena y, de paso, el navegador habilita el audio.
+  };
 
   const refresh = useCallback(async () => {
     const result = await getKdsTicketsAction(station);
@@ -193,7 +212,7 @@ export function KDSDisplay({
             <WifiOff className="size-4" /> Sin tiempo real
           </span>
         )}
-        <button onClick={() => setSound((s) => !s)} aria-label={sound ? 'Silenciar' : 'Activar sonido'} className="grid size-10 place-items-center rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800">
+        <button onClick={toggleSound} title={sound ? 'Sonido activado: toca para silenciar' : 'Sonido silenciado: toca para activar'} aria-label={sound ? 'Silenciar' : 'Activar sonido'} className="grid size-10 place-items-center rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800">
           {sound ? <Volume2 className="size-5" /> : <VolumeX className="size-5" />}
         </button>
         <button onClick={toggleFullscreen} aria-label="Pantalla completa" className="grid size-10 place-items-center rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800">
