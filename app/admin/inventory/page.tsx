@@ -2,14 +2,23 @@ import Link from 'next/link';
 import { AgentNotice } from '@/components/admin/ai/AgentAvatar';
 import { InventoryManager } from '@/components/admin/InventoryManager';
 import { getInventoryNotices } from '@/lib/services/agent-notices';
+import { can } from '@/lib/permissions';
 import { getInventoryOverview } from '@/lib/services/inventory';
 import { requirePageRole } from '@/lib/tenant-context';
 
 export const metadata = { title: 'Inventario' };
 
 export default async function InventoryPage({ searchParams }: { searchParams: Promise<{ filtro?: string }> }) {
-  const ctx = await requirePageRole(['admin']);
-  const [overview, notices, { filtro }] = await Promise.all([getInventoryOverview(ctx), getInventoryNotices(ctx), searchParams]);
+  const ctx = await requirePageRole(['admin', 'supervisor'], ['inventory.view']);
+  const isAdmin = ctx.role === 'admin';
+  const [fullOverview, notices, { filtro }] = await Promise.all([
+    getInventoryOverview(ctx),
+    // Los avisos de los agentes salen del análisis del negocio: eso es sólo del administrador.
+    isAdmin ? getInventoryNotices(ctx) : Promise.resolve({ comprador: [], vigia: [] }),
+    searchParams,
+  ]);
+  // El valor total del inventario es casi un balance: un supervisor no lo recibe ni en los datos de la página.
+  const overview = isAdmin ? fullOverview : { ...fullOverview, stockValue: 0 };
   return (
     <>
       <AgentNotice
@@ -23,7 +32,15 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         }
       />
       <AgentNotice agent="vigia" headline="esto no cuadra en tu inventario (30 días)" items={notices.vigia} />
-      <InventoryManager tenantId={ctx.tenant.id} initialFilter={filtro === 'bajo' ? 'low' : filtro === 'licores' ? 'liquor' : 'all'} overview={overview} currency={ctx.tenant.currency} locale={ctx.tenant.locale} />
+      <InventoryManager
+        caps={{
+          editCatalog: isAdmin,
+          seeValue: isAdmin,
+          waste: can(ctx.profile, 'inventory.waste'),
+          purchase: can(ctx.profile, 'inventory.receive'),
+          adjustment: can(ctx.profile, 'inventory.count'),
+        }}
+        tenantId={ctx.tenant.id} initialFilter={filtro === 'bajo' ? 'low' : filtro === 'licores' ? 'liquor' : 'all'} overview={overview} currency={ctx.tenant.currency} locale={ctx.tenant.locale} />
     </>
   );
 }

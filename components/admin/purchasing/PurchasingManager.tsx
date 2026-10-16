@@ -57,6 +57,10 @@ const TABS = [
 
 type Tenant = { name: string; currency: string; locale: string; timezone: string };
 
+/** Qué puede hacer quien mira esta pantalla (el administrador, todo; un supervisor, lo que se le dio). */
+export type PurchasingCaps = { plan: boolean; receive: boolean; suppliers: boolean; packs: boolean; schedule: boolean; ai: boolean };
+export const ALL_PURCHASING_CAPS: PurchasingCaps = { plan: true, receive: true, suppliers: true, packs: true, schedule: true, ai: true };
+
 export function PurchasingManager({
   tenant,
   suppliers,
@@ -64,6 +68,7 @@ export function PurchasingManager({
   schedule,
   suggestions,
   aiAvailable,
+  caps = ALL_PURCHASING_CAPS,
 }: {
   tenant: Tenant;
   suppliers: Supplier[];
@@ -71,8 +76,10 @@ export function PurchasingManager({
   schedule: Schedule | null;
   suggestions: StoredSuggestion[];
   aiAvailable: boolean;
+  caps?: PurchasingCaps;
 }) {
-  const [tab, setTab] = useState<(typeof TABS)[number]['id']>('order');
+  const tabs = TABS.filter((t) => ({ order: caps.plan, schedule: caps.schedule, suppliers: caps.suppliers, packs: caps.packs })[t.id]);
+  const [tab, setTab] = useState<(typeof TABS)[number]['id']>(tabs[0]?.id ?? 'order');
   const { pending, flash, run } = useAdminMutation();
   const money = (n: number) => formatCurrency(n, tenant.currency, tenant.locale);
   const when = (iso: string) => formatDateTime(iso, tenant.locale, tenant.timezone);
@@ -89,7 +96,7 @@ export function PurchasingManager({
           </p>
         </div>
         <nav aria-label="Secciones" className="flex gap-1 overflow-x-auto rounded-xl bg-zinc-100 p-1 dark:bg-zinc-900">
-          {TABS.map(({ id, label, icon: Icon }) => (
+          {tabs.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               type="button"
@@ -106,7 +113,7 @@ export function PurchasingManager({
         </nav>
       </div>
 
-      {tab === 'order' && (
+      {tab === 'order' && caps.plan && (
         <OrderTab
           tenant={tenant}
           suggestions={suggestions}
@@ -114,15 +121,17 @@ export function PurchasingManager({
           when={when}
           pending={pending}
           run={run}
-          aiAvailable={aiAvailable}
+          aiAvailable={aiAvailable && caps.ai}
+          canReceive={caps.receive}
+          showTips={caps.suppliers && caps.packs}
           defaultHorizon={schedule?.horizon_days ?? 7}
           goTo={setTab}
           hasSuppliers={suppliers.length > 0}
         />
       )}
-      {tab === 'schedule' && <ScheduleTab schedule={schedule} when={when} pending={pending} run={run} />}
-      {tab === 'suppliers' && <SuppliersTab suppliers={suppliers} pending={pending} run={run} />}
-      {tab === 'packs' && <PacksTab ingredients={ingredients} suppliers={suppliers} pending={pending} run={run} />}
+      {tab === 'schedule' && caps.schedule && <ScheduleTab schedule={schedule} when={when} pending={pending} run={run} />}
+      {tab === 'suppliers' && caps.suppliers && <SuppliersTab suppliers={suppliers} pending={pending} run={run} />}
+      {tab === 'packs' && caps.packs && <PacksTab ingredients={ingredients} suppliers={suppliers} pending={pending} run={run} />}
 
       <FlashMessage flash={flash} />
     </div>
@@ -141,6 +150,8 @@ function OrderTab({
   pending,
   run,
   aiAvailable,
+  canReceive,
+  showTips,
   defaultHorizon,
   goTo,
   hasSuppliers,
@@ -152,6 +163,8 @@ function OrderTab({
   pending: boolean;
   run: Run;
   aiAvailable: boolean;
+  canReceive: boolean;
+  showTips: boolean;
   defaultHorizon: number;
   goTo: (tab: 'schedule' | 'suppliers' | 'packs') => void;
   hasSuppliers: boolean;
@@ -187,7 +200,7 @@ function OrderTab({
         </p>
       </Card>
 
-      {!hasSuppliers && (
+      {!hasSuppliers && showTips && (
         <p className="rounded-xl bg-sky-100 p-3 text-sm text-sky-900 dark:bg-sky-500/15 dark:text-sky-200">
           Consejo: registra tus{' '}
           <button type="button" className="font-semibold underline" onClick={() => goTo('suppliers')}>
@@ -202,7 +215,7 @@ function OrderTab({
       )}
 
       {current ? (
-        <SuggestionView key={current.id} s={current} tenant={tenant} money={money} when={when} pending={pending} run={run} aiAvailable={aiAvailable} />
+        <SuggestionView key={current.id} s={current} tenant={tenant} money={money} when={when} pending={pending} run={run} aiAvailable={aiAvailable} canReceive={canReceive} />
       ) : (
         <Card>
           <p className="py-8 text-center text-sm text-zinc-500">Aún no hay pedidos. Calcula el primero o programa el horario del Comprador.</p>
@@ -246,6 +259,7 @@ function SuggestionView({
   pending,
   run,
   aiAvailable,
+  canReceive,
 }: {
   s: StoredSuggestion;
   tenant: Tenant;
@@ -254,6 +268,7 @@ function SuggestionView({
   pending: boolean;
   run: Run;
   aiAvailable: boolean;
+  canReceive: boolean;
 }) {
   const editable = s.status === 'draft';
   const [packs, setPacks] = useState<Record<string, number>>(() => Object.fromEntries(s.lines.map((l) => [l.ingredient_id, l.packs])));
@@ -431,6 +446,7 @@ function SuggestionView({
           <Button variant="ghost" disabled={pending} onClick={() => run(() => discardSuggestionAction(s.id), 'Pedido descartado')}>
             Descartar
           </Button>
+          {canReceive && (
           <Button
             variant="success"
             disabled={pending}
@@ -447,6 +463,7 @@ function SuggestionView({
           >
             <PackageCheck className="size-4" /> Registrar recepción
           </Button>
+          )}
         </Card>
       )}
     </div>

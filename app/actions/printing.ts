@@ -159,14 +159,18 @@ export async function reprintJobAction(jobId: string) {
 // la impresión del navegador como antes.
 
 export async function printBillAction(orderId: string) {
-  return runAction(['admin', 'cashier', 'waiter'], (ctx): Promise<Queued> => enqueueBill(ctx, z.uuid().parse(orderId)));
+  return runAction(['admin', 'cashier', 'waiter', 'supervisor'], (ctx): Promise<Queued> => enqueueBill(ctx, z.uuid().parse(orderId)), ['orders.take']);
 }
 
 export async function printOrderTicketAction(input: { orderId: string; station: 'kitchen' | 'bar'; round?: number }) {
-  return runAction(['admin', 'cashier', 'waiter', 'kitchen', 'bar'], async (ctx): Promise<Queued> => {
-    const n = await enqueueOrderTickets(ctx, z.uuid().parse(input.orderId), input.round, z.enum(['kitchen', 'bar']).parse(input.station));
-    return { queued: n > 0 };
-  });
+  return runAction(
+    ['admin', 'cashier', 'waiter', 'kitchen', 'bar', 'supervisor'],
+    async (ctx): Promise<Queued> => {
+      const n = await enqueueOrderTickets(ctx, z.uuid().parse(input.orderId), input.round, z.enum(['kitchen', 'bar']).parse(input.station));
+      return { queued: n > 0 };
+    },
+    ['orders.take'],
+  );
 }
 
 export async function printCashReportAction(sessionId: string) {

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PERMISSIONS } from '@/lib/permissions';
 
 export const inventoryMovementSchema = z
   .object({
@@ -17,7 +18,7 @@ export const inventoryMovementSchema = z
     path: ['reason'],
   });
 
-export const staffRoleSchema = z.enum(['admin', 'cashier', 'waiter', 'kitchen', 'bar', 'ai_agent']);
+export const staffRoleSchema = z.enum(['admin', 'cashier', 'waiter', 'kitchen', 'bar', 'ai_agent', 'supervisor']);
 
 /** Con correo y contraseña (cualquier rol) o sólo PIN, para personal operativo sin correo propio. */
 export const createStaffSchema = z.discriminatedUnion('access', [
@@ -28,6 +29,8 @@ export const createStaffSchema = z.discriminatedUnion('access', [
     full_name: z.string().trim().min(2).max(120),
     role: staffRoleSchema,
     pin: z.string().optional(),
+    /** Sólo aplica al rol supervisor (026). */
+    permissions: z.array(z.enum(PERMISSIONS)).optional(),
   }),
   z.object({
     access: z.literal('pin'),

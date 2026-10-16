@@ -13,7 +13,7 @@ import { before, describe, test } from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 
 const db = new PGlite();
-const ROLES = ['admin', 'cashier', 'waiter', 'kitchen', 'bar', 'ai_agent'] as const;
+const ROLES = ['admin', 'cashier', 'waiter', 'kitchen', 'bar', 'ai_agent', 'supervisor'] as const;
 type Role = (typeof ROLES)[number];
 type Tenant = {
   id: string;

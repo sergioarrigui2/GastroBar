@@ -2,11 +2,14 @@
 
 import { randomBytes } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
+import { actorOf, recordAuditEvent } from '@/lib/audit/record';
+import { z } from 'zod';
 import { toUserMessage } from '@/lib/errors';
 import { recordInventoryMovement } from '@/lib/services/inventory';
 import { hashPin, isPinRole, pinProblem } from '@/lib/staff/pin';
 import { syntheticStaffEmail } from '@/lib/staff/terminal';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { type Permission, PERMISSIONS } from '@/lib/permissions';
 import { assertRole, getTenantContext } from '@/lib/tenant-context';
 import { createStaffSchema, inventoryMovementSchema } from '@/lib/validations/admin';
 
@@ -20,7 +23,6 @@ const field = (formData: FormData, key: string) => {
 export async function recordInventoryMovementAction(_prev: FormState, formData: FormData): Promise<FormState> {
   try {
     const ctx = await getTenantContext();
-    assertRole(ctx, ['admin', 'kitchen', 'bar', 'cashier']);
     const input = inventoryMovementSchema.parse({
       ingredient_id: field(formData, 'ingredient_id'),
       type: field(formData, 'type'),
@@ -28,6 +30,9 @@ export async function recordInventoryMovementAction(_prev: FormState, formData: 
       reason: field(formData, 'reason'),
       unit_cost: field(formData, 'unit_cost'),
     });
+    // Un supervisor necesita el permiso de ESE tipo de movimiento (recibir, contar o registrar mermas).
+    const needed: Record<typeof input.type, Permission> = { purchase: 'inventory.receive', adjustment: 'inventory.count', waste: 'inventory.waste' };
+    assertRole(ctx, ['admin', 'kitchen', 'bar', 'cashier', 'supervisor'], [needed[input.type]]);
     const ingredient = await recordInventoryMovement(ctx, input);
     revalidatePath('/admin/inventory');
     return { ok: true, message: `${ingredient.name}: stock actualizado a ${ingredient.stock_quantity} ${ingredient.unit}` };
@@ -54,6 +59,7 @@ export async function createStaffAction(_prev: FormState, formData: FormData): P
       full_name: field(formData, 'full_name'),
       role: field(formData, 'role'),
       pin: field(formData, 'pin'),
+      permissions: formData.getAll('permissions').map(String),
     });
     if (input.pin) {
       if (!isPinRole(input.role)) throw new Error('Sólo meseros, caja, cocina y barra usan PIN');
@@ -81,6 +87,8 @@ export async function createStaffAction(_prev: FormState, formData: FormData): P
       role: input.role,
       full_name: input.full_name,
       pin_only: pinOnly,
+      // Los permisos sólo cuentan para el supervisor; el resto de los roles no los usa.
+      permissions: input.role === 'supervisor' && input.access === 'password' ? (input.permissions ?? []) : [],
     });
     if (profileError) await rollback(profileError);
     if (input.pin) {
@@ -90,8 +98,43 @@ export async function createStaffAction(_prev: FormState, formData: FormData): P
       if (pinError) await rollback(pinError);
     }
 
+    await recordAuditEvent(ctx.tenant.id, actorOf(ctx), {
+      action: 'staff.created',
+      category: 'personal',
+      severity: 'important',
+      entity: 'profile',
+      entityId: created.user.id,
+      details: {
+        name: input.full_name,
+        role: input.role,
+        access: input.access,
+        ...(input.role === 'supervisor' && input.access === 'password' ? { permissions: input.permissions ?? [] } : {}),
+      },
+    });
     revalidatePath('/admin/staff');
     return { ok: true, message: `${input.full_name} agregado${input.pin ? ' con PIN' : ''}` };
+  } catch (error) {
+    return { ok: false, message: toUserMessage(error) };
+  }
+}
+
+/** Qué puede hacer un supervisor: lo decide el administrador, casilla por casilla (026). */
+export async function updateStaffPermissionsAction(profileId: string, permissions: string[]): Promise<FormState> {
+  try {
+    const ctx = await getTenantContext();
+    assertRole(ctx, ['admin']);
+    const valid = z.array(z.enum(PERMISSIONS)).max(PERMISSIONS.length).parse(permissions);
+    const { data, error } = await ctx.supabase
+      .from('profiles')
+      .update({ permissions: [...new Set(valid)] })
+      .eq('tenant_id', ctx.tenant.id)
+      .eq('id', z.uuid().parse(profileId))
+      .eq('role', 'supervisor')
+      .select('id');
+    if (error) throw error;
+    if (!data?.length) throw new Error('Sólo se pueden cambiar los permisos de un supervisor de este negocio');
+    revalidatePath('/admin/staff');
+    return { ok: true, message: 'Permisos guardados' };
   } catch (error) {
     return { ok: false, message: toUserMessage(error) };
   }

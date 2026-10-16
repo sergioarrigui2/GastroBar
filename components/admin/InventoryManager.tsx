@@ -22,13 +22,18 @@ const MOVEMENT_LABELS: Record<MovementType, { label: string; className: string }
   adjustment: { label: 'Ajuste', className: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200' },
 };
 
+/** Lo que puede hacer quien mira la pantalla: el administrador, todo; un supervisor, lo que se le dio. */
+export type InventoryCaps = { editCatalog: boolean; seeValue: boolean; waste: boolean; purchase: boolean; adjustment: boolean };
+
 export function InventoryManager({
+  caps,
   tenantId,
   initialFilter = 'all',
   overview,
   currency,
   locale,
 }: {
+  caps: InventoryCaps;
   tenantId: string;
   /** Filtro con el que abre la lista (p. ej. desde el aviso de stock bajo). */
   initialFilter?: Filter;
@@ -41,7 +46,8 @@ export function InventoryManager({
   const [filter, setFilter] = useState<Filter>(initialFilter);
   const [search, setSearch] = useState('');
   const [state, action, pending] = useActionState<FormState, FormData>(recordInventoryMovementAction, null);
-  const [type, setType] = useState<'waste' | 'purchase' | 'adjustment'>('waste');
+  const allowedTypes = (['waste', 'purchase', 'adjustment'] as const).filter((t) => caps[t]);
+  const [type, setType] = useState<'waste' | 'purchase' | 'adjustment'>(allowedTypes[0] ?? 'waste');
   const [editing, setEditing] = useState<Ingredient | 'new' | null>(null);
 
   useRealtimeRefresh({
@@ -64,16 +70,20 @@ export function InventoryManager({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="mr-auto text-2xl font-bold">Inventario</h1>
-        <Button onClick={() => setEditing('new')}>
-          <Plus className="size-4" /> Nuevo insumo
-        </Button>
+        {caps.editCatalog && (
+          <Button onClick={() => setEditing('new')}>
+            <Plus className="size-4" /> Nuevo insumo
+          </Button>
+        )}
       </div>
 
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Card>
-          <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Valor en stock</p>
-          <p className="tabular mt-1 text-2xl font-bold">{money(overview.stockValue)}</p>
-        </Card>
+      <section className={cn('grid grid-cols-2 gap-3', caps.seeValue ? 'lg:grid-cols-4' : 'lg:grid-cols-3')}>
+        {caps.seeValue && (
+          <Card>
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Valor en stock</p>
+            <p className="tabular mt-1 text-2xl font-bold">{money(overview.stockValue)}</p>
+          </Card>
+        )}
         <Card>
           <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Insumos bajo mínimo</p>
           <p className={cn('tabular mt-1 text-2xl font-bold', overview.lowStockCount > 0 && 'text-red-600')}>
@@ -136,8 +146,8 @@ export function InventoryManager({
                   <th className="px-4 py-2 text-right font-medium">Stock</th>
                   <th className="px-4 py-2 text-right font-medium">Mínimo</th>
                   <th className="px-4 py-2 text-right font-medium">Costo / u</th>
-                  <th className="px-4 py-2 text-right font-medium">Valor</th>
-                  <th className="px-2 py-2" />
+                  {caps.seeValue && <th className="px-4 py-2 text-right font-medium">Valor</th>}
+                  {caps.editCatalog && <th className="px-2 py-2" />}
                 </tr>
               </thead>
               <tbody className="tabular divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -169,12 +179,14 @@ export function InventoryManager({
                         {money(i.cost_per_unit * (i.unit === 'unit' ? 1 : 1000))}
                         <span className="text-xs"> /{i.unit === 'unit' ? 'u' : i.unit === 'g' ? 'kg' : 'L'}</span>
                       </td>
-                      <td className="px-4 py-2.5 text-right">{money(Math.max(0, i.stock_quantity) * i.cost_per_unit)}</td>
-                      <td className="px-2 py-2.5 text-right">
-                        <Button variant="ghost" size="sm" onClick={() => setEditing(i)} aria-label={`Editar ${i.name}`}>
-                          <Pencil className="size-4" />
-                        </Button>
-                      </td>
+                      {caps.seeValue && <td className="px-4 py-2.5 text-right">{money(Math.max(0, i.stock_quantity) * i.cost_per_unit)}</td>}
+                      {caps.editCatalog && (
+                        <td className="px-2 py-2.5 text-right">
+                          <Button variant="ghost" size="sm" onClick={() => setEditing(i)} aria-label={`Editar ${i.name}`}>
+                            <Pencil className="size-4" />
+                          </Button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -191,11 +203,12 @@ export function InventoryManager({
         </Card>
 
         <div className="space-y-6">
+          {allowedTypes.length > 0 && (
           <Card>
             <h2 className="mb-3 font-semibold">Registrar movimiento</h2>
             <form action={action} className="space-y-3">
-              <div className="grid grid-cols-3 gap-1 rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800">
-                {(['waste', 'purchase', 'adjustment'] as const).map((t) => (
+              <div className="grid gap-1 rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800" style={{ gridTemplateColumns: `repeat(${allowedTypes.length}, minmax(0, 1fr))` }}>
+                {allowedTypes.map((t) => (
                   <label
                     key={t}
                     className={cn(
@@ -252,6 +265,7 @@ export function InventoryManager({
               </Button>
             </form>
           </Card>
+          )}
 
           <Card>
             <h2 className="mb-3 font-semibold">Últimos movimientos</h2>

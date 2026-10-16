@@ -1,7 +1,7 @@
 'use server';
 
 import { z } from 'zod';
-import { FLOOR_ROLES, KDS_ROLES, runAction } from '@/lib/actions';
+import { FLOOR_ROLES, KDS_ROLES, runAction, SERVE_PERMISSIONS, SERVE_ROLES } from '@/lib/actions';
 import {
   applyOrderDiscount,
   cancelOrder,
@@ -25,11 +25,11 @@ import {
 import type { Station, TableStatus } from '@/types/domain';
 
 export async function submitOrderAction(input: SubmitOrderInput) {
-  return runAction(FLOOR_ROLES, (ctx) => submitOrder(ctx, input));
+  return runAction(SERVE_ROLES, (ctx) => submitOrder(ctx, input), SERVE_PERMISSIONS);
 }
 
 export async function updateItemsStatusAction(input: UpdateItemsStatusInput) {
-  return runAction([...FLOOR_ROLES, ...KDS_ROLES], (ctx) => updateItemsStatus(ctx, input));
+  return runAction([...SERVE_ROLES, ...KDS_ROLES], (ctx) => updateItemsStatus(ctx, input), SERVE_PERMISSIONS);
 }
 
 export async function applyOrderDiscountAction(input: OrderDiscountInput) {
@@ -47,12 +47,14 @@ export async function cancelOrderAction(orderId: string, reason: string) {
 }
 
 export async function transferOrderAction(orderId: string, tableId: string) {
-  return runAction(FLOOR_ROLES, (ctx) => transferOrder(ctx, z.uuid().parse(orderId), z.uuid().parse(tableId)));
+  return runAction(SERVE_ROLES, (ctx) => transferOrder(ctx, z.uuid().parse(orderId), z.uuid().parse(tableId)), SERVE_PERMISSIONS);
 }
 
 export async function transferOrderItemsAction(itemIds: string[], tableId: string) {
-  return runAction(FLOOR_ROLES, (ctx) =>
-    transferOrderItems(ctx, z.array(z.uuid()).min(1).max(100).parse(itemIds), z.uuid().parse(tableId)),
+  return runAction(
+    SERVE_ROLES,
+    (ctx) => transferOrderItems(ctx, z.array(z.uuid()).min(1).max(100).parse(itemIds), z.uuid().parse(tableId)),
+    SERVE_PERMISSIONS,
   );
 }
 
@@ -61,7 +63,7 @@ export async function cancelOrderItemsAction(itemIds: string[], reason: string) 
 }
 
 export async function getOpenBillAction(tableId: string) {
-  return runAction(FLOOR_ROLES, (ctx) => getOpenBill(ctx, { table_id: z.uuid().parse(tableId) }));
+  return runAction(SERVE_ROLES, (ctx) => getOpenBill(ctx, { table_id: z.uuid().parse(tableId) }), SERVE_PERMISSIONS);
 }
 
 /** Cuenta de una orden en cualquier estado (p. ej. ya pagada, para revisar o anular pagos). */
@@ -70,7 +72,7 @@ export async function getBillByOrderAction(orderId: string) {
 }
 
 export async function getTableStatusAction() {
-  return runAction(FLOOR_ROLES, (ctx) => getTableStatus(ctx));
+  return runAction(SERVE_ROLES, (ctx) => getTableStatus(ctx), SERVE_PERMISSIONS);
 }
 
 export async function setTableStatusAction(tableId: string, status: TableStatus) {

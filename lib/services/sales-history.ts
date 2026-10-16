@@ -9,7 +9,7 @@ export function localDay(date: Date, timeZone: string): string {
 }
 
 /** Instante UTC de la medianoche local de un día AAAA-MM-DD en la zona del gastrobar. */
-function localMidnight(day: string, timeZone: string): Date {
+export function localMidnight(day: string, timeZone: string): Date {
   const guess = new Date(`${day}T00:00:00Z`);
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat('en-US', { timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -23,7 +23,7 @@ function localMidnight(day: string, timeZone: string): Date {
 /** Tramo máximo por consulta al resumen del negocio (la función rechaza más de 366 días). */
 const CHUNK_DAYS = 360;
 
-const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+export const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
 async function historyDays(ctx: TenantContext, sinceDay: string) {
   const rows: Array<{ day: string; orders: number; revenue: number; source: string }> = [];

@@ -374,6 +374,32 @@ export default async function HelpPage() {
           ]}
         />
       </section>
+
+      <section className="space-y-4">
+        <h2 className="text-xl font-bold">4 · Supervisor y auditoría</h2>
+        <Card className="space-y-3 text-[15px] leading-relaxed text-zinc-700 dark:text-zinc-300">
+          <p>
+            <b>Supervisor</b> es para una persona de confianza que compra, recibe mercancía, cuenta el inventario o apoya en sala, pero a quien no quieres mostrarle el negocio completo. Se crea en{' '}
+            <Link href="/admin/staff" className="font-semibold text-brand-600 hover:underline">Personal</Link> con correo y contraseña, y tú decides casilla por casilla qué puede hacer.
+          </p>
+          <p>
+            No ve ventas, pagos, caja, recetas ni reportes, ni siquiera consultando la base de datos por detrás. Tampoco el valor total del inventario. Todo lo que hace queda a su nombre.
+          </p>
+          <p>
+            <b>Auditoría</b> (<Link href="/admin/audit" className="font-semibold text-brand-600 hover:underline">menú Auditoría</Link>) es el registro de lo que importa: anulaciones, descuentos, cortesías, pagos anulados, diferencias de caja, ajustes y mermas, cambios de precio y de recetas, permisos y ajustes. Nadie puede editarlo ni borrarlo, ni siquiera tú.
+          </p>
+        </Card>
+        <Table
+          head={['Quiero…', 'Hazlo así']}
+          rows={[
+            ['Dar o quitar un permiso a mi supervisor', 'Personal → su fila → Permisos → marca o desmarca → Guardar. Aplica al instante y queda en la auditoría.'],
+            ['Saber quién anuló o regaló algo', 'Auditoría → Qué mostrar: «Importantes y críticos». Cada línea dice quién, qué, cuánto y por qué; toca una línea para ver el detalle.'],
+            ['Ver cuántas anulaciones o descuentos hizo cada persona', 'Auditoría → tabla «Acciones sensibles por persona». Una cifra alta no es una acusación: es dónde mirar primero.'],
+            ['Llevar la auditoría a Excel', 'Auditoría → Exportar a Excel (CSV): respeta el periodo y los filtros elegidos.'],
+            ['Un supervisor entra y ve «Sin permisos»', 'Todavía no le diste ninguno: Personal → Permisos.'],
+          ]}
+        />
+      </section>
     </div>
   );
 }

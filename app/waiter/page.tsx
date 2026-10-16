@@ -9,7 +9,7 @@ export const metadata = { title: 'Comandero' };
 export const dynamic = 'force-dynamic';
 
 export default async function WaiterPage() {
-  const ctx = await requirePageRole(['admin', 'cashier', 'waiter']);
+  const ctx = await requirePageRole(['admin', 'cashier', 'waiter', 'supervisor'], ['orders.take']);
   const [snapshot, menu, terminal] = await Promise.all([getTableStatus(ctx), getMenu(ctx), isPinSession()]);
 
   return (
@@ -24,7 +24,8 @@ export default async function WaiterPage() {
         taxName: ctx.tenant.tax_name,
         einvoiceEnabled: ctx.tenant.einvoice_enabled,
       }}
-      user={{ name: ctx.profile.full_name, role: ctx.role }}
+      // Un supervisor con «tomar pedidos» ve el comandero de un mesero (sin cobros ni anulaciones).
+      user={{ name: ctx.profile.full_name, role: ctx.role === 'supervisor' ? 'waiter' : ctx.role }}
       snapshot={snapshot}
       menu={menu}
       terminal={terminal}

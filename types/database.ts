@@ -6,7 +6,7 @@
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
-export type AppRole = 'admin' | 'cashier' | 'waiter' | 'kitchen' | 'bar' | 'ai_agent';
+export type AppRole = 'admin' | 'cashier' | 'waiter' | 'kitchen' | 'bar' | 'ai_agent' | 'supervisor';
 export type Station = 'kitchen' | 'bar';
 export type OrderStatus = 'pending' | 'in_preparation' | 'ready' | 'delivered' | 'paid' | 'cancelled';
 export type ItemStatus = 'pending' | 'in_preparation' | 'ready' | 'delivered' | 'cancelled';
@@ -64,6 +64,8 @@ type ProfileRow = {
   is_active: boolean;
   /** Empleado sin correo propio: entra sólo con PIN en una terminal autorizada. */
   pin_only: boolean;
+  /** Permisos del supervisor (026). Sin efecto en otros roles; el administrador lo tiene todo. */
+  permissions: string[];
   created_at: string;
 };
 
@@ -362,6 +364,23 @@ type AiConnectionRow = {
 };
 type AiConnectionTokenRow = { token_hash: string; connection_id: string; kind: 'access' | 'refresh'; expires_at: string; revoked_at: string | null; created_at: string };
 type AiConnectionCallRow = { id: string; tenant_id: string; connection_id: string; tool: string; ok: boolean; created_at: string };
+/** Registro inalterable de lo que importa (027). Sólo lo lee el administrador. */
+export type AuditSeverity = 'info' | 'important' | 'critical';
+export type AuditCategory = 'ventas' | 'caja' | 'inventario' | 'menu' | 'compras' | 'personal' | 'ajustes' | 'seguridad';
+type AuditLogRow = {
+  id: string;
+  tenant_id: string;
+  at: string;
+  actor_id: string | null;
+  actor_name: string | null;
+  actor_role: string | null;
+  action: string;
+  category: AuditCategory;
+  severity: AuditSeverity;
+  entity: string | null;
+  entity_id: string | null;
+  details: Json;
+};
 /** Historial de ventas importado (023): resumen, no cuentas. */
 type SalesHistoryDayRow = { tenant_id: string; day: string; orders: number; revenue: number; tips: number; discounts: number; payments: Json; source: string };
 type SalesHistoryProductRow = { id: string; tenant_id: string; month: string; product_id: string | null; product_name: string; category: string | null; quantity: number; revenue: number; source: string };
@@ -629,6 +648,7 @@ export type Database = {
       ai_connections: Table<AiConnectionRow, 'tenant_id' | 'client_name' | 'agent_profile_id' | 'scopes'>;
       ai_connection_tokens: Table<AiConnectionTokenRow, 'token_hash' | 'connection_id' | 'kind' | 'expires_at'>;
       ai_connection_calls: Table<AiConnectionCallRow, 'tenant_id' | 'connection_id' | 'tool' | 'ok'>;
+      audit_log: Table<AuditLogRow, 'tenant_id' | 'action' | 'category' | 'severity'>;
       sales_history_days: Table<SalesHistoryDayRow, 'tenant_id' | 'day'>;
       sales_history_products: Table<SalesHistoryProductRow, 'tenant_id' | 'month' | 'product_name'>;
       order_submissions: Table<{ client_id: string; tenant_id: string; result: Json; created_by: string | null; created_at: string }, 'client_id' | 'result'>;
@@ -727,6 +747,10 @@ export type Database = {
       };
       get_purchase_inputs: {
         Args: { p_tenant: string; p_days?: number };
+        Returns: Json;
+      };
+      get_audit_summary: {
+        Args: { p_from: string; p_to: string };
         Returns: Json;
       };
     };

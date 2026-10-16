@@ -6,6 +6,7 @@ import { accessTokenForUser } from '@/lib/agent-session';
 import { accessTokenForApiKey, isApiKey } from '@/lib/api-keys';
 import { ACCESS_PREFIX } from '@/lib/oauth/core';
 import { resolveAccessToken } from '@/lib/oauth/server';
+import { canAny, type Permission, supervisorHome } from '@/lib/permissions';
 import {
   createSupabaseServerClient,
   createSupabaseTokenClient,
@@ -101,9 +102,16 @@ export async function getTenantContextFromRequest(request: Request): Promise<Ten
   return resolveTenantContext(createSupabaseTokenClient(token), token);
 }
 
-export function assertRole(ctx: TenantContext, allowed: readonly AppRole[]): void {
+/**
+ * Control de acceso de las operaciones. Un supervisor sólo pasa si la operación declara qué permisos
+ * lo habilitan y él tiene al menos uno: sin ellos se le niega por defecto (así un olvido nunca abre una puerta).
+ */
+export function assertRole(ctx: TenantContext, allowed: readonly AppRole[], permissions?: readonly Permission[]): void {
   if (!allowed.includes(ctx.role)) {
     throw new TenantContextError(`Rol "${ctx.role}" sin permiso para esta operación`, 403, 'forbidden');
+  }
+  if (ctx.role === 'supervisor' && !(permissions?.length && canAny(ctx.profile, ...permissions))) {
+    throw new TenantContextError('No tienes permiso para esta operación. Pídeselo al administrador.', 403, 'forbidden');
   }
 }
 
@@ -115,6 +123,8 @@ const LOGIN_BY_ERROR: Partial<Record<TenantContextError['code'], string>> = {
 
 export const HOME_BY_ROLE: Record<AppRole, string> = {
   admin: '/admin',
+  // El supervisor va a lo primero que tenga permitido: ver homeFor().
+  supervisor: '/sin-acceso',
   cashier: '/waiter',
   waiter: '/waiter',
   kitchen: '/kds/kitchen',
@@ -122,8 +132,17 @@ export const HOME_BY_ROLE: Record<AppRole, string> = {
   ai_agent: '/login?error=ai_agent',
 };
 
-/** Para páginas: resuelve el contexto o redirige (login con el motivo, o home del rol). */
-export async function requirePageRole(allowed: readonly AppRole[]): Promise<TenantContext> {
+/** Pantalla de inicio de quien tiene la sesión (el supervisor, según sus permisos). */
+export function homeFor(ctx: Pick<TenantContext, 'role' | 'profile'>): string {
+  if (ctx.role === 'supervisor') return supervisorHome(ctx.profile) ?? HOME_BY_ROLE.supervisor;
+  return HOME_BY_ROLE[ctx.role];
+}
+
+/**
+ * Para páginas: resuelve el contexto o redirige (login con el motivo, o home del rol).
+ * `permissions`: si el rol «supervisor» está permitido, necesita al menos uno de estos permisos.
+ */
+export async function requirePageRole(allowed: readonly AppRole[], permissions?: readonly Permission[]): Promise<TenantContext> {
   let ctx: TenantContext;
   try {
     ctx = await getTenantContext();
@@ -133,6 +152,7 @@ export async function requirePageRole(allowed: readonly AppRole[]): Promise<Tena
     }
     throw error;
   }
-  if (!allowed.includes(ctx.role)) redirect(HOME_BY_ROLE[ctx.role]);
+  if (!allowed.includes(ctx.role)) redirect(homeFor(ctx));
+  if (ctx.role === 'supervisor' && !(permissions?.length && canAny(ctx.profile, ...permissions))) redirect(homeFor(ctx));
   return ctx;
 }

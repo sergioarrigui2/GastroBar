@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { normalizeScopes } from '@/lib/oauth/core';
+import { actorOf, recordAuditEvent } from '@/lib/audit/record';
 import { createAuthorizationCode, getClient } from '@/lib/oauth/server';
 import { getTenantContext } from '@/lib/tenant-context';
 
@@ -34,6 +35,13 @@ export async function approveAuthorizationAction(formData: FormData) {
     codeChallenge: req.codeChallenge,
     scopes: normalizeScopes(req.scope),
     resource: req.resource,
+  });
+  await recordAuditEvent(ctx.tenant.id, actorOf(ctx), {
+    action: 'ai.connected',
+    category: 'seguridad',
+    severity: 'important',
+    entity: 'oauth_client',
+    details: { client: req.client.client_name ?? req.client.client_id, scopes: normalizeScopes(req.scope) },
   });
   back(req.redirectUri, { code, state: req.state });
 }

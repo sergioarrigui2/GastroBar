@@ -3,13 +3,14 @@ import type { ReactNode } from 'react';
 import { signOutAction } from '@/app/actions/auth';
 import { AdminNav } from '@/components/admin/AdminNav';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { PERMISSIONS } from '@/lib/permissions';
 import { isPlatformAdmin } from '@/lib/platform/auth';
 import { requirePageRole } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
-  const [ctx, platform] = await Promise.all([requirePageRole(['admin']), isPlatformAdmin()]);
+  const [ctx, platform] = await Promise.all([requirePageRole(['admin', 'supervisor'], PERMISSIONS), isPlatformAdmin()]);
 
   return (
     <div className="min-h-dvh md:grid md:grid-cols-[15rem_1fr]">
@@ -17,11 +18,15 @@ export default async function AdminLayout({ children }: { children: ReactNode })
         <div className="flex items-center gap-2 px-4 py-3 md:py-5">
           <div className="min-w-0 flex-1">
             <p className="truncate font-bold">{ctx.tenant.name}</p>
-            <p className="truncate text-xs text-zinc-500">{ctx.profile.full_name} · admin</p>
+            <p className="truncate text-xs text-zinc-500">{ctx.profile.full_name} · {ctx.role === 'supervisor' ? 'supervisor' : 'admin'}</p>
           </div>
           <ThemeToggle />
         </div>
-        <AdminNav kitchenScreen={ctx.tenant.uses_kitchen_screen} barScreen={ctx.tenant.uses_bar_screen} />
+        <AdminNav
+          kitchenScreen={ctx.tenant.uses_kitchen_screen}
+          barScreen={ctx.tenant.uses_bar_screen}
+          access={{ role: ctx.role, permissions: ctx.profile.permissions }}
+        />
         {platform && (
           <Link href="/platform" className="mx-4 mt-4 hidden rounded-xl border border-dashed border-brand-400/60 px-3 py-2 text-sm font-semibold text-brand-600 md:block">
             Consola de plataforma →

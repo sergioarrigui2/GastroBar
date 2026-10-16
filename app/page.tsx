@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { isPlatformAdmin } from '@/lib/platform/auth';
-import { getTenantContext, HOME_BY_ROLE, TenantContextError } from '@/lib/tenant-context';
+import { getTenantContext, homeFor, TenantContextError } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,7 +9,7 @@ export default async function HomePage() {
   let destination: string;
   try {
     const ctx = await getTenantContext();
-    destination = HOME_BY_ROLE[ctx.role];
+    destination = homeFor(ctx);
   } catch (error) {
     if (!(error instanceof TenantContextError)) throw error;
     if (error.code === 'no_profile' && (await isPlatformAdmin())) destination = '/platform';

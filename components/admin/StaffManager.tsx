@@ -1,10 +1,11 @@
 'use client';
 
-import { Bot, KeyRound } from 'lucide-react';
+import { Bot, KeyRound, ShieldCheck } from 'lucide-react';
 import { useActionState, useState, useTransition } from 'react';
-import { createStaffAction, setStaffActiveAction, type FormState } from '@/app/actions/admin';
+import { createStaffAction, setStaffActiveAction, updateStaffPermissionsAction, type FormState } from '@/app/actions/admin';
 import { setStaffPinAction, type TerminalFormState } from '@/app/actions/terminal';
 import { Badge, Button, Card, Input, Label, Select } from '@/components/ui/primitives';
+import { PERMISSION_INFO, PERMISSIONS, SUPERVISOR_PRESET } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 import type { AppRole, Profile } from '@/types/domain';
 
@@ -15,6 +16,7 @@ const ROLE_LABELS: Record<AppRole, string> = {
   kitchen: 'Cocina',
   bar: 'Barra',
   ai_agent: 'Agente IA',
+  supervisor: 'Supervisor',
 };
 const PIN_ROLES: AppRole[] = ['waiter', 'cashier', 'kitchen', 'bar'];
 
@@ -108,6 +110,21 @@ export function StaffManager({ staff, currentUserId, pins }: { staff: Profile[];
                 ))}
               </Select>
             </div>
+            {role === 'supervisor' && access === 'password' && (
+              <fieldset className="space-y-2.5 rounded-xl border border-zinc-200 p-3 dark:border-zinc-700">
+                <legend className="px-1 text-sm font-medium">Qué puede hacer</legend>
+                {PERMISSIONS.map((p) => (
+                  <label key={p} className="flex items-start gap-2 text-sm">
+                    <input type="checkbox" name="permissions" value={p} defaultChecked={SUPERVISOR_PRESET.includes(p)} className="mt-0.5 size-4 accent-emerald-600" />
+                    <span>
+                      <b>{PERMISSION_INFO[p].label}</b>
+                      <span className="block text-xs text-zinc-500">{PERMISSION_INFO[p].hint}</span>
+                    </span>
+                  </label>
+                ))}
+                <p className="text-xs text-zinc-500">No ve ventas, pagos, caja, recetas ni reportes. Puedes cambiar esto cuando quieras.</p>
+              </fieldset>
+            )}
             {access === 'password' && (
               <>
                 <div>
@@ -163,6 +180,10 @@ function StaffRow({ p, self, pin }: { p: Profile; self: boolean; pin?: { locked:
   const [result, setResult] = useState<TerminalFormState>(null);
   const [saving, startSave] = useTransition();
   const canPin = PIN_ROLES.includes(p.role) && p.is_active;
+  const isSupervisor = p.role === 'supervisor';
+  const [permsOpen, setPermsOpen] = useState(false);
+  const [perms, setPerms] = useState<string[]>(p.permissions ?? []);
+  const [savingPerms, startSavePerms] = useTransition();
 
   return (
     <li className={cn('py-3', !p.is_active && 'opacity-60')}>
@@ -178,8 +199,18 @@ function StaffRow({ p, self, pin }: { p: Profile; self: boolean; pin?: { locked:
             {pin && !pin.locked && <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200">PIN</Badge>}
             {pin?.locked && <Badge className="bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-200">PIN bloqueado</Badge>}
             {canPin && !pin && <Badge className="bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200">Sin PIN</Badge>}
+            {isSupervisor && (
+              <Badge className="bg-violet-100 text-violet-800 dark:bg-violet-500/15 dark:text-violet-200">
+                {(p.permissions ?? []).length} permiso{(p.permissions ?? []).length === 1 ? '' : 's'}
+              </Badge>
+            )}
           </span>
         </span>
+        {isSupervisor && p.is_active && (
+          <Button variant="ghost" size="sm" onClick={() => setPermsOpen((v) => !v)} aria-expanded={permsOpen}>
+            <ShieldCheck className="size-4" /> Permisos
+          </Button>
+        )}
         {canPin && (
           <Button variant="ghost" size="sm" onClick={() => setEditing((v) => !v)} aria-expanded={editing}>
             <KeyRound className="size-4" /> {pin ? 'Cambiar PIN' : 'Asignar PIN'}
@@ -196,6 +227,37 @@ function StaffRow({ p, self, pin }: { p: Profile; self: boolean; pin?: { locked:
           </Button>
         )}
       </div>
+      {permsOpen && (
+        <div className="mt-3 space-y-2.5 rounded-xl bg-zinc-50 p-3 dark:bg-zinc-900">
+          {PERMISSIONS.map((perm) => (
+            <label key={perm} className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={perms.includes(perm)}
+                onChange={(e) => setPerms((cur) => (e.target.checked ? [...cur, perm] : cur.filter((x) => x !== perm)))}
+                className="mt-0.5 size-4 accent-emerald-600"
+              />
+              <span>
+                <b>{PERMISSION_INFO[perm].label}</b>
+                <span className="block text-xs text-zinc-500">{PERMISSION_INFO[perm].hint}</span>
+              </span>
+            </label>
+          ))}
+          <Button
+            size="sm"
+            disabled={savingPerms}
+            onClick={() =>
+              startSavePerms(async () => {
+                const r = await updateStaffPermissionsAction(p.id, perms);
+                setResult(r);
+                if (r?.ok) setPermsOpen(false);
+              })
+            }
+          >
+            Guardar permisos
+          </Button>
+        </div>
+      )}
       {editing && (
         <form
           className="mt-3 flex flex-wrap items-center gap-2 pl-13"

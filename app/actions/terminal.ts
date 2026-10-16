@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
+import { actorOf, recordAuditEvent } from '@/lib/audit/record';
 import { toUserMessage } from '@/lib/errors';
 import { hashPin, isPinRole, lockAfterFailure, minutesLeft, pinProblem, verifyPin } from '@/lib/staff/pin';
 import {
@@ -40,7 +41,7 @@ export async function signInWithPinAction(_prev: PinState, formData: FormData): 
   const admin = createSupabaseAdminClient();
   const { data: profile } = await admin
     .from('profiles')
-    .select('id, role, is_active')
+    .select('id, role, is_active, full_name')
     .eq('tenant_id', terminal.tenantId)
     .eq('id', profileId.data)
     .maybeSingle();
@@ -64,6 +65,15 @@ export async function signInWithPinAction(_prev: PinState, formData: FormData): 
       .update({ failed_attempts: failed, locked_until: lockedUntil?.toISOString() ?? null })
       .eq('tenant_id', terminal.tenantId)
       .eq('profile_id', profile.id);
+    // Sin sesión: no sabemos quién teclea, sólo contra qué empleado se probó el PIN.
+    await recordAuditEvent(terminal.tenantId, null, {
+      action: lockedUntil ? 'auth.pin_locked' : 'auth.pin_failed',
+      category: 'seguridad',
+      severity: lockedUntil ? 'critical' : 'important',
+      entity: 'profile',
+      entityId: profile.id,
+      details: { name: profile.full_name, attempts: failed },
+    });
     return { error: lockedUntil ? `PIN incorrecto. Bloqueado ${minutesLeft(lockedUntil.toISOString(), now)} min.` : WRONG_PIN };
   }
   if (row.failed_attempts > 0 || row.locked_until) {
@@ -86,6 +96,13 @@ export async function signInWithPinAction(_prev: PinState, formData: FormData): 
     sameSite: 'lax',
     path: '/',
     maxAge: PIN_SESSION_MAX_AGE,
+  });
+  await recordAuditEvent(terminal.tenantId, { id: profile.id, name: profile.full_name, role: profile.role }, {
+    action: 'auth.pin_login',
+    category: 'seguridad',
+    severity: 'info',
+    entity: 'profile',
+    entityId: profile.id,
   });
 
   redirect(HOME_BY_ROLE[profile.role]);
@@ -173,6 +190,14 @@ export async function setStaffPinAction(profileId: string, pin: string): Promise
         { onConflict: 'profile_id' },
       );
     if (upsertError) throw upsertError;
+    await recordAuditEvent(ctx.tenant.id, actorOf(ctx), {
+      action: 'staff.pin_set',
+      category: 'personal',
+      severity: 'important',
+      entity: 'profile',
+      entityId: profile.id,
+      details: { name: profile.full_name },
+    });
     revalidatePath('/admin/staff');
     return { ok: true, message: `PIN de ${profile.full_name} actualizado` };
   } catch (error) {
