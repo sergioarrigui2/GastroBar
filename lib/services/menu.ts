@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { withStockPolicy } from '@/lib/menu-availability';
 import type { TenantContext } from '@/lib/tenant-context';
 import type { Category, MenuProduct, Modifier, Station } from '@/types/domain';
 
@@ -29,7 +30,8 @@ export async function getMenu(ctx: TenantContext, filters: MenuFilters = {}): Pr
     .order('name');
   if (filters.category_id) productsQuery = productsQuery.eq('category_id', filters.category_id);
   if (filters.station) productsQuery = productsQuery.eq('station', filters.station);
-  if (filters.only_available) productsQuery = productsQuery.eq('is_available', true);
+  // Con stock negativo permitido nada se bloquea por inventario: el filtro de disponibles no aplica.
+  if (filters.only_available && !tenant.allow_negative_stock) productsQuery = productsQuery.eq('is_available', true);
   if (filters.search) {
     const term = filters.search.replace(/[%_,()]/g, ' ').trim();
     if (term) productsQuery = productsQuery.ilike('name', `%${term}%`);
@@ -56,7 +58,7 @@ export async function getMenu(ctx: TenantContext, filters: MenuFilters = {}): Pr
   if (productsRes.error) throw productsRes.error;
   if (modifiersRes.error) throw modifiersRes.error;
 
-  return { categories: categoriesRes.data, products: productsRes.data, modifiers: modifiersRes.data };
+  return { categories: categoriesRes.data, products: withStockPolicy(productsRes.data, tenant.allow_negative_stock), modifiers: modifiersRes.data };
 }
 
 /** Modificadores aplicables a un producto (propios, de su categoría o globales). */

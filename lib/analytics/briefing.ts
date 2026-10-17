@@ -16,6 +16,7 @@ export type BriefingItem = {
 
 const ANOMALY_LINKS: Partial<Record<string, { href: string; label: string }>> = {
   low_stock: { href: '/admin/inventory?filtro=bajo', label: 'Ver en inventario' },
+  negative_stock: { href: '/admin/inventory?filtro=bajo', label: 'Ver en inventario' },
 };
 
 export type PendingPurchase = { created_at: string; lines: number; urgent: number; total_label: string } | null;

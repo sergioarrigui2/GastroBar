@@ -60,6 +60,29 @@ test('variaciones y razones contra el periodo anterior', () => {
   assert.equal(drop?.severity, 'warning');
 });
 
+test('anomalías: el stock negativo avisa que se vendió sin tener el insumo registrado', () => {
+  const a = analyzeSnapshot(
+    snapshot({
+      inventory: {
+        stock_value: 0,
+        low_stock: [
+          { name: 'Pollo', unit: 'g', stock: -540, min: 0 },
+          { name: 'Papa', unit: 'g', stock: -1200, min: 2000 },
+          { name: 'Ron', unit: 'ml', stock: 100, min: 750 },
+        ],
+        usage: [],
+      },
+    }),
+  );
+  const neg = a.anomalies.find((x) => x.id === 'negative_stock');
+  assert.ok(neg, 'debe existir la alerta');
+  assert.equal(neg.severity, 'warning');
+  assert.equal(neg.value, 2); // Pollo y Papa; Ron está bajo pero no negativo
+  assert.ok(neg.detail.includes('Papa (-1200 g), Pollo (-540 g)'));
+  const none = analyzeSnapshot(snapshot({ inventory: { stock_value: 0, low_stock: [{ name: 'Ron', unit: 'ml', stock: 100, min: 750 }], usage: [] } }));
+  assert.ok(!none.anomalies.some((x) => x.id === 'negative_stock'));
+});
+
 test('anomalías: faltantes de inventario, caja, descuentos por mesero y demoras', () => {
   const a = analyzeSnapshot(
     snapshot({

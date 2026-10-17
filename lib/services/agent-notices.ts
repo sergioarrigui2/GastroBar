@@ -52,7 +52,7 @@ export function getInventoryNotices(ctx: TenantContext) {
     const access = await getAgentAccess(ctx);
     const a = await analysis30(ctx);
     const vigia: NoticeItem[] = (access.vigia.active ? a.anomalies : [])
-      .filter((x) => x.kind === 'shrinkage' || x.kind === 'waste' || x.kind === 'low_stock')
+      .filter((x) => x.kind === 'shrinkage' || x.kind === 'waste' || x.kind === 'low_stock' || x.kind === 'negative_stock')
       .map((x) => ({ severity: x.severity, title: x.title, detail: x.detail }));
     const { data } = await ctx.supabase
       .from('purchase_suggestions')

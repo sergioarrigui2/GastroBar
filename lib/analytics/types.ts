@@ -131,6 +131,7 @@ export type Anomaly = {
     | 'staff_voids'
     | 'station_delays'
     | 'low_stock'
+    | 'negative_stock'
     | 'unusual_day';
   severity: AnomalySeverity;
   title: string;

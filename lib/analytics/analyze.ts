@@ -244,6 +244,24 @@ export function detectAnomalies(
     }
   }
 
+  // Stock negativo: se vendió sin que el insumo estuviera registrado (compra o conteo pendiente de ingresar).
+  const negative = snapshot.inventory.low_stock
+    .map((i) => ({ ...i, stock: Number(i.stock) }))
+    .filter((i) => i.stock < 0)
+    .sort((a, b) => a.stock - b.stock || a.name.localeCompare(b.name));
+  if (negative.length > 0) {
+    const shown = negative.slice(0, LOW_STOCK_SHOWN).map((i) => `${i.name} (${round(i.stock, 1)} ${i.unit === 'unit' ? 'u' : i.unit})`);
+    const rest = negative.length - shown.length;
+    out.push({
+      id: 'negative_stock',
+      kind: 'negative_stock',
+      severity: 'warning',
+      title: `${negative.length} insumo(s) con stock negativo: se vendió sin tenerlos registrados`,
+      detail: `Ingresa las compras o el conteo que falta para completarlos. Los más atrasados: ${shown.join(', ')}${rest > 0 ? ` y ${rest} más` : ''}.`,
+      value: negative.length,
+    });
+  }
+
   if (snapshot.inventory.low_stock.some((i) => Number(i.min) > 0)) {
     // Sólo cuentan los insumos con mínimo definido (sin mínimo, estar en 0 no es una alerta).
     const low = snapshot.inventory.low_stock.map((i) => ({ ...i, stock: Number(i.stock), min: Number(i.min) })).filter((i) => i.min > 0);
